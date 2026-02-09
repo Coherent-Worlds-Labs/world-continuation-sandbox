@@ -1,0 +1,9 @@
+{
+  "class": "LocalBackend",
+  "id": "local",
+  "module": "backend.py",
+  "settings": {
+    "dir": ".agentplane/tasks"
+  },
+  "version": 1
+}
