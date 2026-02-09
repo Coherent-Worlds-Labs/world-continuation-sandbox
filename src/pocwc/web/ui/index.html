@@ -1,0 +1,53 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PoCWC World Browser</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>PoCWC World Browser</h1>
+    <p>Competing interpretations simulation explorer</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>Overview</h2>
+      <pre id="overview">Loading...</pre>
+    </section>
+
+    <section>
+      <h2>Branches</h2>
+      <ul id="branches"></ul>
+    </section>
+
+    <section>
+      <h2>States</h2>
+      <label>Branch filter: <input id="branchFilter" placeholder="branch-main" /></label>
+      <button id="loadStates">Load States</button>
+      <ul id="states"></ul>
+    </section>
+
+    <section>
+      <h2>Challenge & Candidate</h2>
+      <label>Challenge ID: <input id="challengeId" placeholder="challenge-0001-branch-main" /></label>
+      <button id="loadChallenge">Load Challenge</button>
+      <pre id="challenge"></pre>
+      <label>Candidate ID: <input id="candidateId" placeholder="challenge-0001-branch-main-cand-1" /></label>
+      <button id="loadCandidate">Load Candidate</button>
+      <pre id="candidate"></pre>
+    </section>
+
+    <section>
+      <h2>Entity/Thread Search</h2>
+      <label>Tag: <input id="searchTag" placeholder="trust" /></label>
+      <button id="runSearch">Search</button>
+      <ul id="searchResults"></ul>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

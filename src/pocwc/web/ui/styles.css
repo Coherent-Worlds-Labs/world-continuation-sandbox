@@ -1,0 +1,69 @@
+﻿:root {
+  --bg: #f4f2ea;
+  --panel: #fffdf7;
+  --ink: #1f2a2e;
+  --accent: #0e7490;
+  --accent-soft: #d5eef4;
+  --line: #d9d5ca;
+}
+
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  background: radial-gradient(circle at top right, #e4f2f9, var(--bg));
+  color: var(--ink);
+}
+
+header {
+  background: linear-gradient(120deg, #0f766e, #155e75);
+  color: white;
+  padding: 1rem 1.5rem;
+}
+
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.8rem;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+}
+
+h1, h2 {
+  margin: 0 0 0.6rem;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+
+input {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  margin: 0.25rem 0;
+}
+
+pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+ul {
+  margin: 0;
+  padding-left: 1rem;
+}
