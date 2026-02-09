@@ -13,6 +13,7 @@ from .domain import Challenge, Difficulty, Verdict
 from .metrics import RuntimeStats, compute_metrics
 from .projection import ProjectionBuilder
 from .provers import default_provers
+from .llm import LLMSettings, create_llm_adapter
 from .store import WorldStore
 from .taskgen import BranchSignals, TaskGenerator
 from .verifiers import default_verifiers
@@ -24,6 +25,9 @@ class SimulationConfig:
     seed: int = 7
     steps: int = 50
     epoch: int = 5
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    llm_base_url: str | None = None
 
 
 class SimulationEngine:
@@ -33,8 +37,14 @@ class SimulationEngine:
         self.store = WorldStore(config.db_path)
         self.projection = ProjectionBuilder()
         self.taskgen = TaskGenerator(self.rng)
-        self.provers = default_provers(self.rng)
-        self.verifiers = default_verifiers(self.rng)
+        llm_settings = LLMSettings.from_env(
+            provider_override=config.llm_provider,
+            model_override=config.llm_model,
+            base_url_override=config.llm_base_url,
+        )
+        llm_adapter = create_llm_adapter(llm_settings)
+        self.provers = default_provers(self.rng, llm_adapter)
+        self.verifiers = default_verifiers(self.rng, llm_adapter)
         self.aggregator = Aggregator()
         self.controller = DifficultyController(epoch=config.epoch)
         self.controller_state = ControllerState(difficulty=Difficulty())
@@ -60,12 +70,13 @@ class SimulationEngine:
                 "parent_state_id": None,
                 "height": 0,
                 "artifact_x": (
-                    "A foundational event E0 is known only through competing interpretations. "
-                    "No interpretation can claim final truth, and new facts shift plausibility without closure."
+                    "In Alice's city, a foundational event happened years ago, yet no one can state what truly happened. "
+                    "Some call it an accident, others an experiment, others a cumulative drift. "
+                    "Every new fact shifts plausibility, but no interpretation reaches final truth."
                 ),
                 "meta_m": {
-                    "entities": ["E0", "I1", "I2", "I3"],
-                    "threads": ["origin ambiguity", "institutional trust", "agent rationality"],
+                    "entities": ["E0", "Alice", "I1", "I2", "I3"],
+                    "threads": ["origin ambiguity", "institutional trust", "memory reliability"],
                     "interpretation_strength": {"I1": 0.34, "I2": 0.33, "I3": 0.33},
                 },
                 "challenge_ref": None,

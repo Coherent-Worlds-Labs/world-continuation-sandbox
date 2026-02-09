@@ -12,9 +12,21 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--db", type=Path, default=Path("data/world.db"))
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--llm-provider", default=None, help="LLM provider (none|openrouter)")
+    parser.add_argument("--llm-model", default=None, help="LLM model id for provider")
+    parser.add_argument("--llm-base-url", default=None, help="Override provider base URL")
     args = parser.parse_args()
 
-    engine = SimulationEngine(SimulationConfig(db_path=args.db, steps=args.steps, seed=args.seed))
+    engine = SimulationEngine(
+        SimulationConfig(
+            db_path=args.db,
+            steps=args.steps,
+            seed=args.seed,
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model,
+            llm_base_url=args.llm_base_url,
+        )
+    )
     summary = engine.run(args.steps)
     print(json.dumps(summary, indent=2))
 
