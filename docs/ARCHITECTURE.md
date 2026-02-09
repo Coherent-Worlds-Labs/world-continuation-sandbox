@@ -8,8 +8,9 @@ The prototype is a single-process simulation system with SQLite persistence and 
 
 1. `WorldStore`: persistent storage for branches, states, challenges, candidates, verification results, and controller epochs.
 2. `TaskGenerator`: chooses directives and adjusts difficulty from branch signals.
-3. `ProverPool`: conservative/aggressive/maintenance candidate generators.
-4. `VerifierPool`: cascade-style verification producing verdicts and diagnostics.
+3. `LLM Adapter Layer`: provider-agnostic interface with an OpenRouter client implementation.
+4. `ProverPool`: conservative/aggressive/maintenance candidate generators with optional LLM narrative generation.
+5. `VerifierPool`: cascade-style verification producing verdicts and diagnostics with optional LLM semantic checks.
 5. `Aggregator`: robust acceptance decision from multi-verifier scores.
 6. `SimulationEngine`: orchestrates branch selection, challenge flow, acceptance, retries, and forking.
 7. `DifficultyController`: epoch retarget mechanism over cognitive difficulty axes.
@@ -30,6 +31,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 - No interpretation collapse to one surviving interpretation.
 - Local coherence checks on accepted artifacts.
 - Path dependence through projection depth.
+- English-only generated artifacts for repository-facing outputs.
 
 ## Execution Flow
 
@@ -57,6 +59,16 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7
 ```
 
+### Run simulation with OpenRouter
+
+```bash
+$env:POCWC_LLM_PROVIDER="openrouter"
+$env:OPENROUTER_API_KEY="<your_key>"
+$env:OPENROUTER_MODEL="openai/gpt-4o-mini"
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-provider openrouter --llm-model openai/gpt-4o-mini
+```
+
 ### Run API/UI server
 
 ```bash
@@ -79,3 +91,4 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - Verification is probabilistic and heuristic.
 - L3 is simulated, not a real expensive external reasoning model.
 - No distributed consensus networking or cryptoeconomic security.
+- LLM provider calls require explicit API credentials and network availability; missing credentials trigger deterministic fallback.

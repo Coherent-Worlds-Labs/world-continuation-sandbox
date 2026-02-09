@@ -42,6 +42,16 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7
 ```
 
+Optional LLM mode (OpenRouter):
+
+```bash
+$env:POCWC_LLM_PROVIDER="openrouter"
+$env:OPENROUTER_API_KEY="<your_key>"
+$env:OPENROUTER_MODEL="openai/gpt-4o-mini"
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-provider openrouter --llm-model openai/gpt-4o-mini
+```
+
 ### 2. Run API + UI
 
 ```bash
@@ -78,6 +88,18 @@ The prototype is considered valid when:
 ## English-Only Repository Rule
 
 All code and repository documentation must remain in English.
+
+## LLM Provider Configuration
+
+The runtime supports provider-agnostic LLM integration with a built-in OpenRouter adapter.
+
+- `POCWC_LLM_PROVIDER`: `none` or `openrouter` (default: `none`)
+- `OPENROUTER_API_KEY`: required for OpenRouter mode
+- `OPENROUTER_MODEL`: model identifier (for example `openai/gpt-4o-mini`)
+- `OPENROUTER_BASE_URL`: optional override (default: `https://openrouter.ai/api/v1`)
+- `POCWC_LLM_TIMEOUT`: optional timeout in seconds (default: `30`)
+
+If key/model/provider are incomplete, the system automatically falls back to deterministic non-LLM generation and verification.
 
 ## License
 
