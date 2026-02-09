@@ -2,8 +2,10 @@
 
 import random
 from dataclasses import dataclass
+from typing import Any
 
 from .domain import Candidate, Challenge
+from .llm import LLMAdapter
 
 
 @dataclass(slots=True)
@@ -11,6 +13,7 @@ class Prover:
     prover_id: str
     style: str
     rng: random.Random
+    llm: LLMAdapter | None = None
 
     def generate(self, challenge: Challenge, ordinal: int) -> Candidate:
         base_strength = {
@@ -29,25 +32,17 @@ class Prover:
         total = sum(base_strength.values())
         strengths = {k: round(v / total, 3) for k, v in base_strength.items()}
 
-        artifact = (
-            f"Directive: {challenge.directive_type}. "
-            f"A new event shifts public interpretation while preserving unresolved alternatives. "
-            f"Projection depth: {challenge.difficulty.dependency_depth}. "
-            f"Candidate emphasis profile: {self.style}."
-        )
+        bundle = self._fallback_bundle(strengths)
+        artifact = self._bundle_to_artifact(bundle)
+        meta = self._bundle_to_meta(bundle, strengths)
 
-        meta = {
-            "claims": [
-                "The event appears to support one interpretation on the surface.",
-                "Alternative explanations remain plausible under deeper analysis.",
-            ],
-            "threads": [
-                "How archival trust should be weighted against process uncertainty.",
-                "Whether social consensus can diverge from semantic coherence.",
-            ],
-            "interpretation_strength": strengths,
-            "closure_risk_hint": round(max(strengths.values()) - min(strengths.values()), 3),
-        }
+        if self.llm is not None:
+            llm_payload = self._generate_with_llm(challenge, strengths)
+            if llm_payload is not None:
+                artifact = str(llm_payload.get("artifact_x", artifact))
+                llm_bundle = llm_payload.get("bundle", bundle)
+                bundle = llm_bundle if isinstance(llm_bundle, dict) else bundle
+                meta = self._bundle_to_meta(bundle, strengths)
 
         return Candidate(
             candidate_id=f"{challenge.challenge_id}-cand-{ordinal}",
@@ -57,10 +52,84 @@ class Prover:
             meta_m=meta,
         )
 
+    @staticmethod
+    def _fallback_bundle(strengths: dict[str, float]) -> dict[str, Any]:
+        strongest = max(strengths, key=strengths.get)
+        return {
+            "scene": (
+                "Alice notices another discrepancy in records that should have remained stable. "
+                "Witnesses agree on the event itself but differ on where and when the key artifact was discovered."
+            ),
+            "surface_confirmation": (
+                f"The immediate public reaction frames the discrepancy as confirmation of interpretation {strongest}."
+            ),
+            "alternative_compatibility": [
+                "A process-trace explanation preserves uncertainty by attributing confidence to archival workflow noise.",
+                "A social-belief explanation preserves uncertainty by showing group incentives can mimic evidence.",
+            ],
+            "social_effect": (
+                "Communities split between evidence-first and interpretation-first responses, increasing coordination friction."
+            ),
+            "deferred_tension": (
+                "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?"
+            ),
+        }
 
-def default_provers(rng: random.Random) -> list[Prover]:
+    @staticmethod
+    def _bundle_to_artifact(bundle: dict[str, Any]) -> str:
+        alternatives = bundle.get("alternative_compatibility", [])
+        alt_lines = "\n".join(f"- {item}" for item in alternatives[:2])
+        return (
+            f"Scene: {bundle.get('scene', '')}\n\n"
+            f"Surface confirmation: {bundle.get('surface_confirmation', '')}\n\n"
+            f"Alternative compatibility:\n{alt_lines}\n\n"
+            f"Social effect: {bundle.get('social_effect', '')}\n\n"
+            f"Deferred tension: {bundle.get('deferred_tension', '')}"
+        )
+
+    @staticmethod
+    def _bundle_to_meta(bundle: dict[str, Any], strengths: dict[str, float]) -> dict[str, Any]:
+        claims = [
+            "The observed development appears convergent at first glance.",
+            "Competing interpretations remain plausible under deeper reading.",
+        ]
+        alternatives = bundle.get("alternative_compatibility", [])
+        if isinstance(alternatives, list):
+            claims.extend(str(item) for item in alternatives[:2])
+        return {
+            "claims": claims,
+            "threads": [
+                str(bundle.get("deferred_tension", "")),
+                "How social pressure modifies perceived certainty.",
+            ],
+            "interpretation_strength": strengths,
+            "closure_risk_hint": round(max(strengths.values()) - min(strengths.values()), 3),
+            "story_bundle": bundle,
+        }
+
+    def _generate_with_llm(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any] | None:
+        system = (
+            "You generate PoCWC world continuations. Output valid JSON only. "
+            "Keep all text in English. Do not reveal final truth."
+        )
+        prompt = (
+            "Return JSON with keys: artifact_x (string), bundle (object with keys "
+            "scene, surface_confirmation, alternative_compatibility[list], social_effect, deferred_tension). "
+            f"Directive: {challenge.directive_type}. Style: {self.style}. "
+            f"Projection: {challenge.projection}\n"
+            f"Interpretation strengths seed: {strengths}\n"
+            "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure."
+        )
+        try:
+            payload = self.llm.generate_json(system_prompt=system, user_prompt=prompt, temperature=0.35, max_tokens=1000)
+        except Exception:  # noqa: BLE001
+            return None
+        return payload if isinstance(payload, dict) else None
+
+
+def default_provers(rng: random.Random, llm: LLMAdapter | None = None) -> list[Prover]:
     return [
-        Prover("prover-conservative", "conservative", rng),
-        Prover("prover-aggressive", "aggressive", rng),
-        Prover("prover-maintenance", "maintenance", rng),
+        Prover("prover-conservative", "conservative", rng, llm),
+        Prover("prover-aggressive", "aggressive", rng, llm),
+        Prover("prover-maintenance", "maintenance", rng, llm),
     ]
