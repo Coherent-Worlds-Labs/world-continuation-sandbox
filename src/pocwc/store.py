@@ -114,6 +114,7 @@ class WorldStore:
                     branch_id TEXT NOT NULL,
                     state_id TEXT NOT NULL,
                     fact_id TEXT NOT NULL,
+                    anchor_type TEXT NOT NULL,
                     subject TEXT NOT NULL,
                     predicate TEXT NOT NULL,
                     object TEXT NOT NULL,
@@ -121,12 +122,28 @@ class WorldStore:
                     location_hint TEXT NOT NULL,
                     evidence_type TEXT NOT NULL,
                     falsifiable INTEGER NOT NULL,
+                    can_be_reinterpreted INTEGER NOT NULL,
+                    references_json TEXT NOT NULL,
+                    introduced_height INTEGER NOT NULL,
                     fact_text TEXT NOT NULL,
                     fact_hash TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
                 """
             )
+            self._migrate_branch_fact_columns(conn)
+
+    def _migrate_branch_fact_columns(self, conn: sqlite3.Connection) -> None:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(branch_facts)").fetchall()}
+        additions = {
+            "anchor_type": "TEXT NOT NULL DEFAULT 'public_artifact'",
+            "can_be_reinterpreted": "INTEGER NOT NULL DEFAULT 1",
+            "references_json": "TEXT NOT NULL DEFAULT '[]'",
+            "introduced_height": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, ddl in additions.items():
+            if column not in columns:
+                conn.execute(f"ALTER TABLE branch_facts ADD COLUMN {column} {ddl}")
 
     def upsert_branch(self, branch: dict[str, Any]) -> None:
         with closing(self._conn()) as conn:
@@ -262,19 +279,24 @@ class WorldStore:
         return [self._decode_row(r, ("alternative_compatibility",)) for r in rows]
 
     def insert_branch_fact(self, row: dict[str, Any]) -> None:
+        payload = dict(row)
+        payload["references_json"] = json.dumps(payload.get("references", []), ensure_ascii=False)
+        payload.setdefault("anchor_type", "public_artifact")
+        payload.setdefault("can_be_reinterpreted", 1)
+        payload.setdefault("introduced_height", 0)
         with closing(self._conn()) as conn:
             conn.execute(
                 """
                 INSERT INTO branch_facts(
-                    branch_id, state_id, fact_id, subject, predicate, object, time_hint, location_hint,
-                    evidence_type, falsifiable, fact_text, fact_hash, created_at
+                    branch_id, state_id, fact_id, anchor_type, subject, predicate, object, time_hint, location_hint,
+                    evidence_type, falsifiable, can_be_reinterpreted, references_json, introduced_height, fact_text, fact_hash, created_at
                 )
                 VALUES(
-                    :branch_id, :state_id, :fact_id, :subject, :predicate, :object, :time_hint, :location_hint,
-                    :evidence_type, :falsifiable, :fact_text, :fact_hash, :created_at
+                    :branch_id, :state_id, :fact_id, :anchor_type, :subject, :predicate, :object, :time_hint, :location_hint,
+                    :evidence_type, :falsifiable, :can_be_reinterpreted, :references_json, :introduced_height, :fact_text, :fact_hash, :created_at
                 )
                 """,
-                row,
+                payload,
             )
 
     def list_branch_facts(self, branch_id: str, limit: int = 200) -> list[dict[str, Any]]:
@@ -284,13 +306,36 @@ class WorldStore:
                 "SELECT * FROM branch_facts WHERE branch_id=? ORDER BY id DESC LIMIT ?",
                 (branch_id, cap),
             ).fetchall()
-        return [dict(r) for r in rows]
+        return [self._decode_row(r, ("references_json",)) for r in rows]
+
+    def list_active_facts(self, branch_id: str, limit: int = 200) -> list[dict[str, Any]]:
+        cap = max(1, min(limit, 1000))
+        with closing(self._conn()) as conn:
+            rows = conn.execute(
+                """
+                SELECT bf.*
+                FROM branch_facts bf
+                JOIN (
+                  SELECT fact_id, MAX(id) AS max_id
+                  FROM branch_facts
+                  WHERE branch_id=?
+                  GROUP BY fact_id
+                ) latest ON latest.fact_id = bf.fact_id AND latest.max_id = bf.id
+                WHERE bf.branch_id=?
+                ORDER BY bf.introduced_height DESC, bf.id DESC
+                LIMIT ?
+                """,
+                (branch_id, branch_id, cap),
+            ).fetchall()
+        return [self._decode_row(r, ("references_json",)) for r in rows]
 
     def _decode_row(self, row: sqlite3.Row, json_fields: tuple[str, ...]) -> dict[str, Any]:
         data = dict(row)
         for field in json_fields:
             if data.get(field):
                 data[field] = json.loads(data[field])
+        if "references_json" in data:
+            data["references"] = data.get("references_json", [])
         return data
 
     def list_branches(self) -> list[dict[str, Any]]:
@@ -359,4 +404,3 @@ class WorldStore:
         with closing(self._conn()) as conn:
             row = conn.execute("SELECT * FROM controller_epochs ORDER BY step DESC LIMIT 1").fetchone()
         return self._decode_row(row, ("difficulty", "metrics")) if row else None
-

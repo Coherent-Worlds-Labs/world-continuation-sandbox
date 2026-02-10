@@ -45,8 +45,10 @@ class SimulationEngine:
         self.store = WorldStore(config.db_path)
         self.world = load_world_config(config.world_config_path)
         self.main_branch_id = str(self.world.get("main_branch_id", "branch-main"))
+        self.progression = dict(self.world.get("progression", {}))
+        self.taskgen_policy = dict(self.world.get("taskgen_policy", {}))
         self.projection = ProjectionBuilder()
-        self.taskgen = TaskGenerator(self.rng)
+        self.taskgen = TaskGenerator(self.rng, self.taskgen_policy)
         llm_settings = LLMSettings.from_env(
             provider_override=config.llm_provider,
             model_override=config.llm_model,
@@ -85,6 +87,8 @@ class SimulationEngine:
         self.runtime = RuntimeStats()
         self.debt_history: list[float] = []
         self.stagnation_streak = 0
+        self.steps_since_new_fact = 0
+        self.ontological_stagnation_score = 0.0
 
     @staticmethod
     def _now() -> str:
@@ -104,6 +108,18 @@ class SimulationEngine:
 
     def _semantic_similarity(self, a: str, b: str) -> float:
         return semantic_similarity(a, b, self.llm_adapter)
+
+    def _progression_int(self, key: str, default: int) -> int:
+        try:
+            return int(self.progression.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    def _progression_float(self, key: str, default: float) -> float:
+        try:
+            return float(self.progression.get(key, default))
+        except (TypeError, ValueError):
+            return default
 
     def _recent_branch_narratives(self, branch_id: str, limit: int = 5) -> list[str]:
         states = self.store.list_states(branch_id=branch_id)
@@ -134,6 +150,30 @@ class SimulationEngine:
 
     def _recent_branch_facts(self, branch_id: str, limit: int = 120) -> list[dict[str, Any]]:
         return self.store.list_branch_facts(branch_id, limit=limit)
+
+    def _recent_branch_directives(self, branch_id: str, limit: int = 12) -> list[str]:
+        challenges = self.store.list_challenges(branch_id=branch_id)
+        return [str(ch.get("directive_type", "")) for ch in challenges[-limit:] if str(ch.get("directive_type", "")).strip()]
+
+    def _required_families(self, recent_directives: list[str]) -> list[str]:
+        families_window = self._progression_int("family_window", 6)
+        required = list(
+            self.progression.get(
+                "required_families",
+                ["introduce_fact", "agent_commitment", "resource_constraint", "information_asymmetry", "delayed_consequence"],
+            )
+        )
+        seen = {self.taskgen.directive_family(d) for d in recent_directives[-families_window:]}
+        return [item for item in required if item not in seen]
+
+    def _active_anchor_ids(self, branch_id: str, limit: int = 300) -> list[str]:
+        facts = self.store.list_active_facts(branch_id, limit=limit)
+        ids: list[str] = []
+        for fact in facts:
+            fid = str(fact.get("fact_id", "")).strip()
+            if fid and fid not in ids:
+                ids.append(fid)
+        return ids
 
     def get_genesis_snapshot(self) -> dict[str, Any]:
         self._seed_genesis()
@@ -304,21 +344,30 @@ class SimulationEngine:
         )
 
     def _build_challenge(self, step: int, branch: dict[str, Any]) -> Challenge:
-        states = self.store.list_states(branch_id=branch["branch_id"])
+        branch_id = branch["branch_id"]
+        states = self.store.list_states(branch_id=branch_id)
         artifacts = [s["artifact_x"] for s in states]
-        recent_narratives = self._recent_branch_narratives(branch["branch_id"], limit=6)
-        recent_facts = self._recent_branch_facts(branch["branch_id"], limit=160)
+        recent_narratives = self._recent_branch_narratives(branch_id, limit=6)
+        recent_facts = self._recent_branch_facts(branch_id, limit=160)
+        active_anchor_ids = self._active_anchor_ids(branch_id, limit=250)
+        recent_directives = self._recent_branch_directives(branch_id, limit=12)
+        required_families = self._required_families(recent_directives)
         signals = self._branch_signals(branch)
-        directive = self.taskgen.pick_directive(signals, self.controller_state.mode)
+        directive = self.taskgen.pick_directive(
+            signals,
+            self.controller_state.mode,
+            recent_directives=recent_directives,
+            required_families=required_families,
+        )
         if self.stagnation_streak >= 2:
-            directive = self.rng.choice(["IntroduceAmbiguousFact", "AgentActionDivergence", "DelayedEffect"])
+            directive = self.rng.choice(["AgentCommitment", "ResourceConstraint", "InformationAsymmetry", "DelayedConsequence"])
         difficulty = self.taskgen.build_difficulty(
             self.controller_state.difficulty,
             signals,
             self.controller_state.mode,
         )
         projection = self.projection.build(artifacts, difficulty.dependency_depth)
-        story_memory = self.store.get_story_memory(branch["branch_id"])
+        story_memory = self.store.get_story_memory(branch_id)
         if story_memory:
             projection = (
                 f"{projection}\n\nStory continuity summary:\n{story_memory.get('summary', '')}\n"
@@ -329,11 +378,17 @@ class SimulationEngine:
                 f"{projection}\n\nRecent branch facts (avoid rephrasing these as new):\n"
                 + "\n".join(f"- {str(f.get('fact_text', ''))}" for f in recent_facts[:8])
             )
-        cid = f"challenge-{step:04d}-{branch['branch_id']}"
+        cadence_window = max(1, self._progression_int("fact_cadence_window", 3))
+        required_min_new_facts = 1 if self.steps_since_new_fact >= cadence_window - 1 else 0
+        dependency_target_depth = max(1, self._progression_int("dependency_target_depth", 4))
+        required_reference_count = max(1, self._progression_int("required_reference_count", 2))
+        max_new_facts_per_step = max(1, self._progression_int("max_new_facts_per_step", 1))
+        enforce_dependency = difficulty.dependency_depth < dependency_target_depth
+        cid = f"challenge-{step:04d}-{branch_id}"
 
         challenge = Challenge(
             challenge_id=cid,
-            branch_id=branch["branch_id"],
+            branch_id=branch_id,
             parent_state_id=branch["head_state_id"],
             projection=projection,
             directive_type=directive,
@@ -343,6 +398,14 @@ class SimulationEngine:
                 "cascade": "L0-L3",
                 "recent_narratives": recent_narratives,
                 "recent_fact_texts": [str(f.get("fact_text", "")) for f in recent_facts],
+                "active_anchor_ids": active_anchor_ids,
+                "recent_directives": recent_directives,
+                "required_families": required_families,
+                "required_min_new_facts": required_min_new_facts,
+                "max_new_facts_per_step": max_new_facts_per_step,
+                "dependency_target_depth": dependency_target_depth,
+                "required_reference_count": required_reference_count,
+                "enforce_dependency_accumulation": enforce_dependency,
                 "stagnation_streak": self.stagnation_streak,
             },
         )
@@ -384,6 +447,7 @@ class SimulationEngine:
             )
         novelty_scores = [float(r.signals.get("novelty_score", r.score)) for r in results]
         tension_scores = [float(r.signals.get("tension_progress", 0.5)) for r in results]
+        novelty_result = next((r for r in results if r.verifier_id == "verifier-novelty"), None)
         hard_fail = any("Novelty gate failed" in (r.notes or "") for r in results)
         decision = self.aggregator.decide(
             results,
@@ -393,16 +457,16 @@ class SimulationEngine:
             hard_fail=hard_fail,
         )
 
+        novelty_new_fact_count = int(float((novelty_result.signals.get("new_fact_count", 0.0) if novelty_result else 0.0)))
+        novelty_reference_count = int(float((novelty_result.signals.get("reference_count", 0.0) if novelty_result else 0.0)))
         signal_means = {
             "closure_risk": round(sum(r.signals["closure_risk"] for r in results) / len(results), 3),
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
             "fragility_score": round(sum(r.signals["fragility_score"] for r in results) / len(results), 3),
             "novelty_score": round(sum(novelty_scores) / max(1, len(novelty_scores)), 3),
             "tension_progress": round(sum(tension_scores) / max(1, len(tension_scores)), 3),
-            "new_fact_count": round(
-                sum(float(r.signals.get("new_fact_count", 0.0)) for r in results) / max(1, len(results)),
-                3,
-            ),
+            "new_fact_count": float(novelty_new_fact_count),
+            "reference_count": float(novelty_reference_count),
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
 
@@ -466,11 +530,16 @@ class SimulationEngine:
             height=state_height,
             story_bundle=candidate.meta_m.get("story_bundle", {}),
         )
-        self._record_branch_facts(branch_id=branch_id, state_id=state_id, facts=candidate.meta_m.get("novel_facts", []))
+        self._record_branch_facts(
+            branch_id=branch_id,
+            state_id=state_id,
+            state_height=state_height,
+            facts=candidate.meta_m.get("novel_facts", []),
+        )
 
         self.runtime.accepted_candidates += 1
 
-    def _record_branch_facts(self, *, branch_id: str, state_id: str, facts: Any) -> None:
+    def _record_branch_facts(self, *, branch_id: str, state_id: str, state_height: int, facts: Any) -> None:
         if not isinstance(facts, list):
             return
         for index, item in enumerate(facts):
@@ -479,11 +548,15 @@ class SimulationEngine:
             fact_text = self._fact_text(item)
             if not fact_text:
                 continue
+            references = item.get("references", [])
+            if not isinstance(references, list):
+                references = []
             self.store.insert_branch_fact(
                 {
                     "branch_id": branch_id,
                     "state_id": state_id,
-                    "fact_id": str(item.get("fact_id", f"{state_id}-fact-{index+1}")),
+                    "fact_id": str(item.get("fact_id", f"{state_id}-fact-{index + 1}")),
+                    "anchor_type": str(item.get("anchor_type", "public_artifact")),
                     "subject": str(item.get("subject", "")),
                     "predicate": str(item.get("predicate", "")),
                     "object": str(item.get("object", "")),
@@ -491,6 +564,9 @@ class SimulationEngine:
                     "location_hint": str(item.get("location_hint", "")),
                     "evidence_type": str(item.get("evidence_type", "")),
                     "falsifiable": 1 if bool(item.get("falsifiable", True)) else 0,
+                    "can_be_reinterpreted": 1 if bool(item.get("can_be_reinterpreted", True)) else 0,
+                    "references": references,
+                    "introduced_height": state_height,
                     "fact_text": fact_text,
                     "fact_hash": self._fact_hash(fact_text),
                     "created_at": self._now(),
@@ -613,6 +689,32 @@ class SimulationEngine:
         )
         self.runtime.forks_created += 1
 
+    def _ontological_stagnation(self, branch_id: str) -> dict[str, Any]:
+        window = max(2, self._progression_int("stagnation_window", 6))
+        states = self.store.list_states(branch_id=branch_id)
+        recent_states = states[-window:]
+        if len(recent_states) < 2:
+            return {"score": 1.0, "new_fact_count": 0, "entity_growth": 0, "agent_structure_change": 0}
+        state_ids = {str(s.get("state_id", "")) for s in recent_states}
+        facts = [f for f in self.store.list_branch_facts(branch_id, limit=1000) if str(f.get("state_id", "")) in state_ids]
+        new_fact_count = len({str(f.get("fact_id", "")) for f in facts if str(f.get("fact_id", "")).strip()})
+        first_entities = set(str(x) for x in recent_states[0].get("meta_m", {}).get("entities", []))
+        last_entities = set(str(x) for x in recent_states[-1].get("meta_m", {}).get("entities", []))
+        entity_growth = max(0, len(last_entities - first_entities))
+        agent_structure_change = 1 if any(str(f.get("anchor_type", "")) == "agent_commitment" for f in facts) else 0
+        components = [
+            0.0 if new_fact_count > 0 else 1.0,
+            0.0 if entity_growth > 0 else 1.0,
+            0.0 if agent_structure_change > 0 else 1.0,
+        ]
+        score = sum(components) / len(components)
+        return {
+            "score": round(score, 3),
+            "new_fact_count": int(new_fact_count),
+            "entity_growth": int(entity_growth),
+            "agent_structure_change": int(agent_structure_change),
+        }
+
     def run(self, steps: int | None = None, progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
         self._seed_genesis()
         total_steps = steps or self.config.steps
@@ -679,7 +781,8 @@ class SimulationEngine:
                         "raw_score": round(score, 3),
                         "similarity": round(max_similarity, 3),
                         "penalty": round(novelty_penalty, 3),
-                        "new_fact_count": signals.get("new_fact_count", 0.0),
+                        "new_fact_count": int(signals.get("new_fact_count", 0.0)),
+                        "reference_count": int(signals.get("reference_count", 0.0)),
                         "novelty_score": signals.get("novelty_score", 0.0),
                         "tension_progress": signals.get("tension_progress", 0.0),
                         "verdict": adjusted_verdict.value,
@@ -701,18 +804,15 @@ class SimulationEngine:
                     best_levels = levels
                 self.store.update_candidate_status(candidate.candidate_id, adjusted_verdict.value)
 
+            new_fact_count_current = int(best_any_meta.get("new_fact_count", 0.0)) if best_any_meta else 0
             if accepted_candidate is not None:
                 self._accept_candidate(challenge, accepted_candidate, best_score, best_meta, best_levels)
                 self._maybe_create_fork(challenge, accepted_candidate)
                 reject_streak = 0
-                if float(best_meta.get("novelty_score", 0.0)) < 0.45:
-                    self.stagnation_streak += 1
-                else:
-                    self.stagnation_streak = 0
+                new_fact_count_current = int(best_meta.get("new_fact_count", 0.0))
             else:
                 self.runtime.rejected_candidates += 1
                 reject_streak += 1
-                self.stagnation_streak += 1
                 # Adaptive retry: after consecutive rejects, accept the strongest candidate near threshold.
                 adaptive_threshold = max(0.45, self.controller_state.theta - 0.08)
                 if best_any_candidate is not None and reject_streak >= 2 and best_any_score >= adaptive_threshold:
@@ -721,7 +821,7 @@ class SimulationEngine:
                     self.runtime.rejected_candidates = max(0, self.runtime.rejected_candidates - 1)
                     reject_streak = 0
                     accepted_via_retry = True
-                    self.stagnation_streak = max(0, self.stagnation_streak - 1)
+                    new_fact_count_current = int(best_any_meta.get("new_fact_count", 0.0))
                 stale = self.store.get_branch(branch["branch_id"])
                 if stale is not None:
                     self.store.upsert_branch(
@@ -737,6 +837,17 @@ class SimulationEngine:
                         }
                     )
 
+            if new_fact_count_current >= 1:
+                self.steps_since_new_fact = 0
+            else:
+                self.steps_since_new_fact += 1
+            ontological = self._ontological_stagnation(branch["branch_id"])
+            self.ontological_stagnation_score = float(ontological["score"])
+            if self.ontological_stagnation_score >= self._progression_float("stagnation_threshold", 0.66):
+                self.stagnation_streak += 1
+            else:
+                self.stagnation_streak = 0
+
             verif = self.store.list_verification_results()
             branches = self.store.list_branches()
             metrics = compute_metrics(branches, verif, self.runtime)
@@ -749,9 +860,18 @@ class SimulationEngine:
                 debt_trend=debt_trend(self.debt_history),
                 novelty_score=float(best_meta.get("novelty_score", 0.5)) if best_meta else 0.5,
                 stability_score=1.0 - min(1.0, metrics["validator_variance"] * 2.0),
+                ontological_stagnation=self.ontological_stagnation_score,
             )
             self.controller_state = self.controller.update(step, self.controller_state, cm)
-            self._record_controller_epoch(step, {**metrics, "debt_trend": cm.debt_trend, "stability": cm.stability_score})
+            self._record_controller_epoch(
+                step,
+                {
+                    **metrics,
+                    "debt_trend": cm.debt_trend,
+                    "stability": cm.stability_score,
+                    "ontological_stagnation": self.ontological_stagnation_score,
+                },
+            )
 
             if progress_callback is not None:
                 head_state = self.store.get_branch(branch["branch_id"])
@@ -763,6 +883,8 @@ class SimulationEngine:
                 step_similarity = self._semantic_similarity(previous_progress_narrative, current_narrative)
                 previous_progress_narrative = current_narrative
                 candidate_artifact = best_any_candidate.artifact_x if best_any_candidate is not None else ""
+                max_facts = max(1, self._progression_int("max_new_facts_per_step", 1))
+                active_anchor_count = len(self._active_anchor_ids(branch["branch_id"], limit=250))
                 progress_callback(
                     {
                         "step": step,
@@ -779,13 +901,12 @@ class SimulationEngine:
                         "candidate_artifact": candidate_artifact,
                         "candidate_score": round(best_any_score, 3) if best_any_score >= 0 else None,
                         "step_similarity": round(step_similarity, 3),
-                        "new_fact_count": round(float(best_any_meta.get("new_fact_count", 0.0)), 3),
-                        "novel_fact_ratio": round(
-                            min(1.0, float(best_any_meta.get("new_fact_count", 0.0)) / 2.0),
-                            3,
-                        ),
+                        "new_fact_count": int(new_fact_count_current),
+                        "novel_fact_ratio": round(min(1.0, float(new_fact_count_current) / float(max_facts)), 3),
                         "semantic_delta_score": round(float(best_any_meta.get("novelty_score", 0.0)), 3),
                         "stagnation_streak": self.stagnation_streak,
+                        "ontological_stagnation": round(self.ontological_stagnation_score, 3),
+                        "active_anchor_count": active_anchor_count,
                         "decision_reasons": best_any_reasons,
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
@@ -800,5 +921,6 @@ class SimulationEngine:
             "difficulty": self.controller_state.difficulty.as_dict(),
             "mode": self.controller_state.mode,
             "theta": self.controller_state.theta,
+            "ontological_stagnation": round(self.ontological_stagnation_score, 3),
         }
         return final_metrics

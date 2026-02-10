@@ -51,12 +51,18 @@ async function loadStory() {
   const branch = document.getElementById("storyBranch").value.trim() || "branch-main";
   const summary = await fetchJson(`/api/story/summary?branch_id=${encodeURIComponent(branch)}`);
   const events = await fetchJson(`/api/story?branch_id=${encodeURIComponent(branch)}&limit=200`);
+  const facts = await fetchJson(`/api/facts/active?branch_id=${encodeURIComponent(branch)}&limit=200`);
 
   document.getElementById("storySummary").textContent = JSON.stringify(summary, null, 2);
   renderList(
     "storyTimeline",
     events,
     (e) => `h${e.height} | ${e.title} | ${e.scene} | deferred: ${e.deferred_tension}`
+  );
+  renderList(
+    "activeFacts",
+    facts,
+    (f) => `h${f.introduced_height} | ${f.fact_id} | ${f.anchor_type} | ${f.subject} ${f.predicate} ${f.object} | refs: ${(f.references || []).join(", ")}`
   );
 }
 

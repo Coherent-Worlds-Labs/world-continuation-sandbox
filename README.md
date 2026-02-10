@@ -79,14 +79,15 @@ Runtime stream notes:
 
 - The CLI prints per-candidate traces with `llm_used=true|false`, source (`llm`, `llm_bundle_rebuilt`, or `fallback`), verdict, and score.
 - The stream also shows `step_similarity` and per-candidate novelty diagnostics (`sim`, `penalty`, `raw`, adjusted `score`) to make repetition visible.
-- The stream includes progression metrics: `new_fact_count`, `novel_fact_ratio`, `semantic_delta`, and `stagnation`.
+- The stream includes progression metrics: `new_fact_count` (integer), `novel_fact_ratio`, `semantic_delta`, `stagnation`, `ontological`, and active `anchors`.
 - Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
 - Diversify mode now pushes stronger novelty pressure: directives are biased toward non-maintenance events, prompt constraints require one concrete new event per step, and high overlap candidates receive a bounded repetition penalty.
 
 Novelty contract:
 
 - Candidate generation must provide structured `novel_facts` and explicit change annotations (`what_changed_since_previous_step`, `why_not_rephrase`).
-- A dedicated novelty gate verifier rejects candidates with insufficient new facts or low semantic delta, even when wording is coherent.
+- A dedicated novelty gate verifier rejects candidates with insufficient new facts, weak semantic delta, missing anchor IDs, or missing required references to prior anchors.
+- `AgentCommitment` directives require at least one persistent commitment anchor.
 
 ### 2. Run API + UI
 
@@ -101,12 +102,13 @@ Story View usage:
 
 - In the UI, open the `Story View` panel.
 - Keep `branch-main` (or enter another branch id).
-- Click `Load Story` to fetch continuity summary and timeline events.
+- Click `Load Story` to fetch continuity summary, timeline events, and active fact/anchor list.
 
 Story API endpoints:
 
 - `GET /api/story/summary?branch_id=branch-main`
 - `GET /api/story?branch_id=branch-main&limit=200`
+- `GET /api/facts/active?branch_id=branch-main&limit=200`
 
 ### 3. Run tests
 
@@ -157,6 +159,8 @@ World-specific setup is centralized in `config/world.default.json`, including:
 - genesis state text and initial story bundle,
 - default branch/id naming for the world,
 - continuity defaults (anchor character, known entities, summary template),
+- progression policy (`fact_cadence_window`, dependency target, required directive families, stagnation thresholds),
+- task-generation policy (`max_same_directive_streak`),
 - fallback narrative templates used when LLM is unavailable.
 
 You can supply a custom file via `--world-config` in both `run_simulation.py` and `run_server.py`.

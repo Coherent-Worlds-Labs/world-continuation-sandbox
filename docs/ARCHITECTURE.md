@@ -7,7 +7,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 ### Components
 
 1. `WorldStore`: persistent storage for branches, states, challenges, candidates, verification results, and controller epochs.
-2. `TaskGenerator`: chooses directives and adjusts difficulty from branch signals.
+2. `TaskGenerator`: chooses directives, enforces structural operator rotation, and adjusts difficulty from branch signals.
 3. `LLM Adapter Layer`: provider-agnostic interface with an OpenRouter client implementation.
 4. `ProverPool`: conservative/aggressive/maintenance candidate generators with optional LLM narrative generation.
 5. `VerifierPool`: cascade-style verification producing verdicts and diagnostics with optional LLM semantic checks.
@@ -16,6 +16,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 7. `DifficultyController`: epoch retarget mechanism over cognitive difficulty axes.
 8. `World Browser`: API routes + static frontend pages.
 9. `Narrative Continuity Memory`: branch-scoped summary plus per-state story events.
+10. `Anchor Registry`: persistent branch facts/anchors with references and introduced height.
 
 ## Data Model
 
@@ -27,6 +28,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 - `controller_epochs`: historical retarget snapshots.
 - `story_memory`: current continuity snapshot for each branch.
 - `story_events`: append-only timeline entries derived from accepted story bundles.
+- `branch_facts`: persistent world anchors with ids, types, references, and reinterpretability flags.
 
 ## Invariants
 
@@ -45,7 +47,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 5. Verify each candidate through cascade.
 6. Aggregate scores and accept or reject.
 7. Update branch metrics and optionally fork.
-8. Recompute metrics and retarget difficulty on epoch boundaries.
+8. Recompute metrics, including ontological stagnation, and retarget difficulty on epoch boundaries.
 
 ## Runbook
 
@@ -97,6 +99,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - `GET /api/metrics`
 - `GET /api/story/summary?branch_id=branch-main`
 - `GET /api/story?branch_id=branch-main&limit=200`
+- `GET /api/facts/active?branch_id=branch-main&limit=200`
 
 ## Known Constraints
 

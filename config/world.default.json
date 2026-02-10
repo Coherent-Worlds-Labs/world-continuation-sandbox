@@ -56,6 +56,25 @@
     "default_known_entities": ["Alice", "E0", "city archive"],
     "summary_template": "{anchor_character} continuity at height {height}: {scene_excerpt}"
   },
+  "taskgen_policy": {
+    "max_same_directive_streak": 2
+  },
+  "progression": {
+    "fact_cadence_window": 3,
+    "max_new_facts_per_step": 1,
+    "dependency_target_depth": 4,
+    "required_reference_count": 2,
+    "family_window": 6,
+    "required_families": [
+      "introduce_fact",
+      "agent_commitment",
+      "resource_constraint",
+      "information_asymmetry",
+      "delayed_consequence"
+    ],
+    "stagnation_window": 6,
+    "stagnation_threshold": 0.66
+  },
   "fallback_generation": {
     "scene_templates": [
       "Alice notices another discrepancy in records that should have remained stable.",
@@ -74,6 +93,26 @@
       "A social-belief explanation preserves uncertainty by showing group incentives can mimic evidence."
     ],
     "social_effect": "Communities split between evidence-first and interpretation-first responses, increasing coordination friction.",
-    "deferred_tension": "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?"
+    "deferred_tension": "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?",
+    "fact_subjects": [
+      "Archive auditor",
+      "Transit office clerk",
+      "City council delegate",
+      "Public records volunteer"
+    ],
+    "fact_predicates": [
+      "publishes",
+      "flags",
+      "reclassifies",
+      "commits_publicly_to_verify"
+    ],
+    "fact_objects": [
+      "a timestamped registry copy",
+      "a discrepancy bulletin",
+      "a witness-index correction",
+      "a sworn public claim"
+    ],
+    "fact_time_hints": ["dawn", "midday", "late evening"],
+    "fact_locations": ["north archive wing", "river checkpoint", "central records desk"]
   }
 }

@@ -2,6 +2,7 @@
 
 import random
 from dataclasses import dataclass
+from typing import Any
 
 from .domain import Candidate, Challenge, VerificationLevel, VerificationResult, Verdict
 from .invariants import evaluate_invariants
@@ -103,11 +104,10 @@ class NoveltyGateVerifier:
     verifier_id: str
     rng: random.Random
     llm: LLMAdapter | None = None
-    min_new_facts: int = 2
     min_novelty_score: float = 0.30
 
     @staticmethod
-    def _fact_text(fact: dict) -> str:
+    def _fact_text(fact: dict[str, Any]) -> str:
         return " | ".join(
             [
                 str(fact.get("subject", "")),
@@ -118,23 +118,55 @@ class NoveltyGateVerifier:
             ]
         ).strip()
 
-    def evaluate(self, challenge: Challenge, candidate: Candidate, allow_l3: bool = False) -> VerificationResult:
-        recent_facts = list(challenge.verifier_policy.get("recent_fact_texts", []))
-        recent_narratives = list(challenge.verifier_policy.get("recent_narratives", []))
+    def _normalized_facts(self, candidate: Candidate) -> list[dict[str, Any]]:
         facts = candidate.meta_m.get("novel_facts", [])
         if not isinstance(facts, list):
-            facts = []
-
-        unique_new = 0
+            return []
+        normalized: list[dict[str, Any]] = []
         for item in facts:
             if not isinstance(item, dict):
                 continue
             text = self._fact_text(item)
             if not text:
                 continue
+            normalized.append(item)
+        return normalized
+
+    def evaluate(self, challenge: Challenge, candidate: Candidate, allow_l3: bool = False) -> VerificationResult:
+        _ = allow_l3
+        policy = challenge.verifier_policy
+        recent_facts = list(policy.get("recent_fact_texts", []))
+        recent_narratives = list(policy.get("recent_narratives", []))
+        active_anchor_ids = set(str(x) for x in policy.get("active_anchor_ids", []))
+        required_min_new_facts = max(0, int(policy.get("required_min_new_facts", 1)))
+        max_new_facts_per_step = max(1, int(policy.get("max_new_facts_per_step", 1)))
+        dependency_target_depth = max(1, int(policy.get("dependency_target_depth", 4)))
+        required_reference_count = max(1, int(policy.get("required_reference_count", 2)))
+        enforce_dependency_accumulation = bool(policy.get("enforce_dependency_accumulation", True))
+
+        facts = self._normalized_facts(candidate)
+
+        unique_new = 0
+        named_count = 0
+        referenced_anchors: set[str] = set()
+        commitment_count = 0
+
+        for item in facts:
+            fact_id = str(item.get("fact_id", "")).strip()
+            if fact_id:
+                named_count += 1
+            text = self._fact_text(item)
             max_sim = max((semantic_similarity(text, prev, self.llm) for prev in recent_facts), default=0.0)
             if max_sim < 0.82:
                 unique_new += 1
+            references = item.get("references", [])
+            if isinstance(references, list):
+                for ref in references:
+                    ref_id = str(ref).strip()
+                    if ref_id and ref_id in active_anchor_ids:
+                        referenced_anchors.add(ref_id)
+            if str(item.get("anchor_type", "")).strip() == "agent_commitment":
+                commitment_count += 1
 
         scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
         semantic_delta = 1.0 - max((semantic_similarity(scene, prev, self.llm) for prev in recent_narratives), default=0.0)
@@ -145,15 +177,35 @@ class NoveltyGateVerifier:
 
         hard_fail = False
         reasons: list[str] = []
-        if unique_new < self.min_new_facts:
+
+        if named_count != len(facts):
+            hard_fail = True
+            reasons.append("Novelty gate failed: every fact must have a non-empty fact_id")
+        if unique_new < required_min_new_facts:
             hard_fail = True
             reasons.append("Novelty gate failed: insufficient new structured facts")
+        if unique_new > max_new_facts_per_step:
+            hard_fail = True
+            reasons.append("Novelty gate failed: too many new facts for one step")
         if novelty_score < self.min_novelty_score:
             hard_fail = True
             reasons.append("Novelty gate failed: semantic delta below threshold")
         if not str(candidate.meta_m.get("what_changed_since_previous_step", "")).strip():
             hard_fail = True
             reasons.append("Novelty gate failed: missing explicit change annotation")
+
+        if (
+            enforce_dependency_accumulation
+            and challenge.difficulty.dependency_depth < dependency_target_depth
+            and len(active_anchor_ids) >= required_reference_count
+        ):
+            if len(referenced_anchors) < required_reference_count:
+                hard_fail = True
+                reasons.append("Novelty gate failed: insufficient references to prior anchors")
+
+        if challenge.directive_type == "AgentCommitment" and commitment_count < 1:
+            hard_fail = True
+            reasons.append("Novelty gate failed: AgentCommitment directive requires commitment anchor")
 
         verdict = Verdict.REJECT if hard_fail else Verdict.ACCEPT
         score = max(0.0, min(1.0, novelty_score))
@@ -168,7 +220,9 @@ class NoveltyGateVerifier:
                 "chaos_risk": 0.45,
                 "fragility_score": round(max(0.0, 1.0 - novelty_score), 3),
                 "novelty_score": round(novelty_score, 3),
-                "new_fact_count": float(unique_new),
+                "new_fact_count": float(int(unique_new)),
+                "named_fact_count": float(int(named_count)),
+                "reference_count": float(int(len(referenced_anchors))),
                 "tension_progress": round(tension_progress, 3),
             },
             notes="; ".join(reasons) if reasons else "novelty gate passed",

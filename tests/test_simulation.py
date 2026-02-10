@@ -59,8 +59,11 @@ class SimulationTests(unittest.TestCase):
             self.assertIn("novel_fact_ratio", update)
             self.assertIn("semantic_delta_score", update)
             self.assertIn("stagnation_streak", update)
+            self.assertIn("ontological_stagnation", update)
+            self.assertIn("active_anchor_count", update)
             self.assertGreaterEqual(float(update["step_similarity"]), 0.0)
             self.assertLessEqual(float(update["step_similarity"]), 1.0)
+            self.assertEqual(int(update["new_fact_count"]), float(update["new_fact_count"]))
             traces = update["candidate_traces"]
             self.assertGreaterEqual(len(traces), 1)
             for trace in traces:
@@ -68,6 +71,22 @@ class SimulationTests(unittest.TestCase):
                 self.assertIn("penalty", trace)
                 self.assertIn("new_fact_count", trace)
                 self.assertIn("novelty_score", trace)
+                self.assertEqual(int(trace["new_fact_count"]), float(trace["new_fact_count"]))
+
+    def test_directive_repetition_is_bounded(self) -> None:
+        db = Path("data/test_world_directive_repetition.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=30, seed=4))
+        engine.run(30)
+        directives = [row["directive_type"] for row in engine.store.list_challenges(branch_id="branch-main")]
+        streak = 1
+        for idx in range(1, len(directives)):
+            if directives[idx] == directives[idx - 1]:
+                streak += 1
+            else:
+                streak = 1
+            self.assertLessEqual(streak, 2)
 
     def test_branch_fact_registry_populates(self) -> None:
         db = Path("data/test_world_fact_registry.db")
@@ -77,6 +96,11 @@ class SimulationTests(unittest.TestCase):
         engine.run(3)
         facts = engine.store.list_branch_facts("branch-main", limit=50)
         self.assertGreaterEqual(len(facts), 1)
+        active_facts = engine.store.list_active_facts("branch-main", limit=50)
+        self.assertGreaterEqual(len(active_facts), 1)
+        self.assertIn("anchor_type", active_facts[0])
+        self.assertIn("references", active_facts[0])
+        self.assertIn("introduced_height", active_facts[0])
 
     def test_custom_world_config_overrides_genesis(self) -> None:
         db = Path("data/test_world_custom_config.db")
@@ -108,6 +132,15 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(snap["branch_id"], "branch-custom")
         self.assertEqual(snap["genesis_state_id"], "state-custom-0")
         self.assertIn("Morgan", snap["scene"])
+
+    def test_controller_reports_ontological_stagnation(self) -> None:
+        db = Path("data/test_world_controller_ontology.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=8, seed=6))
+        summary = engine.run(8)
+        self.assertIn("controller", summary)
+        self.assertIn("ontological_stagnation", summary["controller"])
 
 
 if __name__ == "__main__":

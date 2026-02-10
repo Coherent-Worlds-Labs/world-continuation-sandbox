@@ -147,6 +147,17 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
             self._json(memory)
             return
 
+        if path == "/api/facts/active":
+            qs = parse_qs(parsed.query)
+            branch_id = qs.get("branch_id", ["branch-main"])[0]
+            limit_raw = qs.get("limit", ["200"])[0]
+            try:
+                limit = int(limit_raw)
+            except ValueError:
+                limit = 200
+            self._json(self.store.list_active_facts(branch_id, limit=limit))
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
 

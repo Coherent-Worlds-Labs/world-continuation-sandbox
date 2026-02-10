@@ -95,18 +95,8 @@ class Prover:
         scene_templates = list(profile.get("scene_templates", []))
         event_templates = list(profile.get("event_templates", []))
         alternatives = list(profile.get("alternative_compatibility", []))
-        social_effect = str(
-            profile.get(
-                "social_effect",
-                "",
-            )
-        )
-        deferred_tension = str(
-            profile.get(
-                "deferred_tension",
-                "",
-            )
-        )
+        social_effect = str(profile.get("social_effect", ""))
+        deferred_tension = str(profile.get("deferred_tension", ""))
         if scene_templates and event_templates:
             scene = f"{self.rng.choice(scene_templates)} {self.rng.choice(event_templates)}"
         elif scene_templates:
@@ -119,25 +109,38 @@ class Prover:
             social_effect = "Public coordination shifts while interpretation certainty remains unresolved."
         if not deferred_tension:
             deferred_tension = "The accepted update preserves unresolved interpretive tension."
+
         fact_subject_pool = list(profile.get("fact_subjects", [])) or ["Observer", "Council", "Archive", "Courier"]
         fact_location_pool = list(profile.get("fact_locations", [])) or ["north district", "river checkpoint", "central depot"]
         fact_time_pool = list(profile.get("fact_time_hints", [])) or ["dawn", "midnight", "late evening"]
         fact_predicates = list(profile.get("fact_predicates", [])) or ["reported", "released", "discovered", "reclassified"]
         fact_objects = list(profile.get("fact_objects", [])) or ["a document", "an artifact", "a log discrepancy", "a sealed record"]
 
-        facts = []
-        for idx in range(2):
-            fact = {
-                "fact_id": f"{challenge.challenge_id}-f{idx+1}-{self.prover_id[-4:]}",
-                "subject": self.rng.choice(fact_subject_pool),
-                "predicate": self.rng.choice(fact_predicates),
-                "object": self.rng.choice(fact_objects),
-                "time_hint": self.rng.choice(fact_time_pool),
-                "location_hint": self.rng.choice(fact_location_pool),
-                "evidence_type": "report",
-                "falsifiable": True,
-            }
-            facts.append(fact)
+        active_anchor_ids = [str(x) for x in challenge.verifier_policy.get("active_anchor_ids", []) if str(x).strip()]
+        max_refs = int(challenge.verifier_policy.get("required_reference_count", 2))
+        references = active_anchor_ids[-max_refs:] if active_anchor_ids else []
+
+        anchor_type = "public_artifact"
+        if challenge.directive_type == "AgentCommitment":
+            anchor_type = "agent_commitment"
+
+        primary_fact = {
+            "fact_id": f"{challenge.challenge_id}-f1-{self.prover_id[-4:]}",
+            "anchor_type": anchor_type,
+            "subject": self.rng.choice(fact_subject_pool),
+            "predicate": self.rng.choice(fact_predicates),
+            "object": self.rng.choice(fact_objects),
+            "time_hint": self.rng.choice(fact_time_pool),
+            "location_hint": self.rng.choice(fact_location_pool),
+            "evidence_type": "report",
+            "falsifiable": True,
+            "can_be_reinterpreted": True,
+            "references": references,
+        }
+        if anchor_type == "agent_commitment":
+            primary_fact["predicate"] = "commits_publicly"
+            primary_fact["object"] = f"a verifiable claim aligned with interpretation {strongest}"
+
         return {
             "scene": (
                 f"{scene} Witnesses agree on the event itself but differ on where and when the key artifact was discovered. "
@@ -149,9 +152,9 @@ class Prover:
             "alternative_compatibility": alternatives[:4],
             "social_effect": social_effect,
             "deferred_tension": deferred_tension,
-            "novel_facts": facts,
-            "what_changed_since_previous_step": f"New facts were introduced under {challenge.directive_type}.",
-            "why_not_rephrase": "At least two structured facts differ in subject/predicate/object/time/location.",
+            "novel_facts": [primary_fact],
+            "what_changed_since_previous_step": f"A new anchor-backed fact was introduced under {challenge.directive_type}.",
+            "why_not_rephrase": "The new step adds a uniquely identified anchor and explicit references to prior anchors.",
             "tension_progress": round(min(1.0, 0.45 + self.rng.uniform(0.05, 0.3)), 3),
         }
 
@@ -176,16 +179,25 @@ class Prover:
         alternatives = bundle.get("alternative_compatibility", [])
         if isinstance(alternatives, list):
             claims.extend(str(item) for item in alternatives[:2])
+        facts = bundle.get("novel_facts", []) if isinstance(bundle.get("novel_facts", []), list) else []
+        entities = sorted(
+            {
+                str(f.get("subject", "")).strip()
+                for f in facts
+                if isinstance(f, dict) and str(f.get("subject", "")).strip()
+            }
+        )
         return {
             "claims": claims,
             "threads": [
                 str(bundle.get("deferred_tension", "")),
                 "How social pressure modifies perceived certainty.",
             ],
+            "entities": entities,
             "interpretation_strength": strengths,
             "closure_risk_hint": round(max(strengths.values()) - min(strengths.values()), 3),
             "story_bundle": bundle,
-            "novel_facts": bundle.get("novel_facts", []),
+            "novel_facts": facts,
             "what_changed_since_previous_step": str(bundle.get("what_changed_since_previous_step", "")),
             "why_not_rephrase": str(bundle.get("why_not_rephrase", "")),
             "tension_progress": float(bundle.get("tension_progress", 0.5)),
@@ -216,17 +228,23 @@ class Prover:
         prompt = (
             "Return JSON with keys: artifact_x (string), bundle (object with keys "
             "scene, surface_confirmation, alternative_compatibility[list], social_effect, deferred_tension), "
-            "novel_facts (list of objects with fact_id,subject,predicate,object,time_hint,location_hint,evidence_type,falsifiable), "
+            "novel_facts (list with exactly one object containing fact_id,anchor_type,subject,predicate,object,time_hint,location_hint,evidence_type,falsifiable,can_be_reinterpreted,references[list]), "
             "what_changed_since_previous_step (string), why_not_rephrase (string), tension_progress (float 0..1). "
             f"Directive: {challenge.directive_type}. Style: {self.style}. "
             f"Projection: {challenge.projection}\n"
             f"Interpretation strengths seed: {strengths}\n"
             f"Language requirement: produce all narrative text in {self.story_language}.\n"
-            "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure.\n"
-            "Must include at least two new structured facts for this step and avoid reusing the exact previous scene wording."
+            "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure. "
+            "Use one clearly named new fact only. Include references to prior anchor IDs when available. "
+            "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement."
         )
         temp = self.llm_temperature + max(0.0, challenge.difficulty.novelty_budget - 0.5) * 0.4
-        if challenge.directive_type in {"IntroduceAmbiguousFact", "AgentActionDivergence", "DelayedEffect"}:
+        if challenge.directive_type in {
+            "IntroduceAmbiguousFact",
+            "AgentActionDivergence",
+            "DelayedConsequence",
+            "AgentCommitment",
+        }:
             temp += 0.08
         try:
             payload = self.llm.generate_json(

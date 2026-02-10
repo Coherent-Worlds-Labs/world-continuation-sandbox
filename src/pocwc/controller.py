@@ -17,6 +17,7 @@ class ControllerMetrics:
     debt_trend: float
     novelty_score: float
     stability_score: float
+    ontological_stagnation: float
 
 
 @dataclass(slots=True)
@@ -69,6 +70,10 @@ class DifficultyController:
         if metrics.novelty_score < 0.45:
             nb += 0.12
             ul += 0.08
+        if metrics.ontological_stagnation > 0.66:
+            dd += 1
+            nb += 0.10
+            ul += 0.06
 
         next_difficulty = Difficulty(
             dependency_depth=max(1, min(8, int(dd))),
@@ -86,6 +91,8 @@ class DifficultyController:
             mode = "false-convergence"
         elif metrics.fork_rate > 0.40:
             mode = "consolidate"
+        elif metrics.ontological_stagnation > 0.66:
+            mode = "diversify"
         elif metrics.novelty_score < 0.55 or metrics.accept_rate > 0.75:
             mode = "diversify"
         else:
