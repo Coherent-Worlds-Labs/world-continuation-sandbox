@@ -1,6 +1,6 @@
 {
   "meta": {
-    "checksum": "8415839382a820acd9b1a632664e5550dc77751db9ca7dd9c06a83cc4b7a2053",
+    "checksum": "e2297570ddc757133622b7d8c8faf90996cdb2114b1537281952303d43312216",
     "checksum_algo": "sha256",
     "managed_by": "agentplane",
     "schema_version": 1
@@ -4703,6 +4703,286 @@
         "note": "Verified: FIX5 implemented with strict fact type enum, fact specificity hard gate, InstitutionalAction directive support, and scene stagnation breaker wiring. pytest 25/25 passed and 12-step smoke run completed.",
         "state": "ok",
         "updated_at": "2026-02-10T21:47:03.152Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Verified: FIX6 tracking completed with all dependent tasks finished, verified, and committed."
+        }
+      ],
+      "commit": {
+        "hash": "07d230dd01699a9690f1e637b6993f2cbbcb8d42",
+        "message": "✅ EJG6RH backend: implement FIX6 gate transparency and protocol diagnostics"
+      },
+      "depends_on": [
+        "202602102156-EJG6RH",
+        "202602102156-X087WT",
+        "202602102156-NCBE90"
+      ],
+      "description": "Track FIX6: split gate predicates, step-aware progress refs, strict schema/type checks, structured reject diagnostics, and regression coverage.",
+      "dirty": false,
+      "doc": "## Summary\n\nTrack FIX6 implementation and closure across verifier correctness, schema consistency, diagnostics, tests, and docs.\n\n## Scope\n\nIn scope: task coordination and closure artifacts for FIX6 tasks EJG6RH, X087WT, NCBE90. Out of scope: implementation details not tied to FIX6.\n\n## Plan\n\n1) Keep decomposition aligned with approved FIX6 scope. 2) Ensure each implementation task has plan and verify steps approved. 3) Close tracking task after dependent tasks are done, verified, and exported.\n\n## Risks\n\nRisk: diagnostics changes may drift from implemented predicates. Mitigation: require explicit reason codes in verify evidence and smoke output.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T22:09:50.782Z — VERIFY — ok\n\nBy: ORCHESTRATOR\n\nNote: Tracking verified: EJG6RH, X087WT, and NCBE90 are DONE with verification and commit 07d230d.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:58:07.345Z, excerpt_hash=sha256:6edc63914a0fd61c47fab3be847dd3ead2e7770266f4620c203063fbb1a4ab39\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nIf FIX6 tasks fail verification, reopen tracking and mark rework; do not finish until dependent tasks are corrected.\n\n## Context\n\nUser requested moving to FIX6 analysis and implementation from sow/FIX6.txt with strict protocol transparency.\n\n## Verify Steps\n\n1) agentplane task show 202602102156-EJG6RH; expect DONE and verification=ok. 2) agentplane task show 202602102156-X087WT; expect DONE and verification=ok. 3) agentplane task show 202602102156-NCBE90; expect DONE and verification=ok.\n\n## Notes\n\n### Decisions`n- Keep FIX6 split into backend gate logic, schema consistency, and tests/docs for traceability.",
+      "doc_updated_at": "2026-02-10T22:09:50.950Z",
+      "doc_updated_by": "ORCHESTRATOR",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T22:09:50.782Z",
+          "author": "ORCHESTRATOR",
+          "note": "Tracking verified: EJG6RH, X087WT, and NCBE90 are DONE with verification and commit 07d230d.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T22:09:50.950Z",
+          "author": "ORCHESTRATOR",
+          "from": "TODO",
+          "note": "Verified: FIX6 tracking completed with all dependent tasks finished, verified, and committed.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102156-6DN3WM",
+      "id_source": "generated",
+      "owner": "ORCHESTRATOR",
+      "plan_approval": {
+        "note": "Approved FIX6 tracking plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:58:35.362Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Closed FIX6 tracking task.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "PoCWC FIX6 gate transparency and correctness tracking",
+      "verification": {
+        "note": "Tracking verified: EJG6RH, X087WT, and NCBE90 are DONE with verification and commit 07d230d.",
+        "state": "ok",
+        "updated_at": "2026-02-10T22:09:50.782Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Refactoring verifier gate predicates and adding structured reject diagnostics for FIX6 with step-aware refs policy."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: FIX6 gate predicates were split and novelty/progress/schema diagnostics are now explicit and machine-readable."
+        }
+      ],
+      "commit": {
+        "hash": "07d230dd01699a9690f1e637b6993f2cbbcb8d42",
+        "message": "✅ EJG6RH backend: implement FIX6 gate transparency and protocol diagnostics"
+      },
+      "depends_on": [],
+      "description": "Refactor verifier gates into independent predicates, enforce pure novelty check, add structured reason_codes/details, and wire step-aware progress policy.",
+      "dirty": false,
+      "doc": "## Summary\n\nRefactor verifier gating into explicit predicates and produce machine-readable reject diagnostics.\n\n## Scope\n\nIn scope: src/pocwc/verifiers.py, src/pocwc/orchestrator.py, scripts/run_simulation.py for gate/report wiring. Out of scope: UI redesign.\n\n## Plan\n\n1) Split novelty/progress/schema/evidence/type checks into independent predicates. 2) Make novelty gate compare novelty_total against novelty_min only. 3) Add reason_codes/details payload and propagate to trace and CLI. 4) Implement step-aware refs policy (step1 refs_min=0, step2+ refs_min=1 by config).\n\n## Risks\n\nRisk: stricter gates can reduce acceptance rate. Mitigation: add transparent details and configurable thresholds in world config.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T22:08:24.668Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: gate predicates are separated, novelty check is pure, and structured reason codes/details are propagated to traces and decisions. Tests passed and simulation smoke run completed.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:58:47.131Z, excerpt_hash=sha256:89c33bb61e7a12703cc655d03121c66c23a798d92059608e62ab678fa63c350d\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert FIX6 gate refactor commit and restore previous verifier behavior if regression is detected.\n\n## Context\n\nBased on FIX6 findings: novelty failures are opaque and likely conflated with non-novelty checks.\n\n## Verify Steps\n\n1) python -m pytest tests -q`n2) python scripts/run_simulation.py --steps 8 --db data/fix6_smoke.db --seed 7\n\n## Notes\n\n### Decisions`n- Reject reasons must be explicit and deterministic for every hard fail.",
+      "doc_updated_at": "2026-02-10T22:09:02.936Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:58:47.131Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Refactoring verifier gate predicates and adding structured reject diagnostics for FIX6 with step-aware refs policy.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T22:08:24.668Z",
+          "author": "CODER",
+          "note": "Verified: gate predicates are separated, novelty check is pure, and structured reason codes/details are propagated to traces and decisions. Tests passed and simulation smoke run completed.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T22:09:02.936Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: FIX6 gate predicates were split and novelty/progress/schema diagnostics are now explicit and machine-readable.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102156-EJG6RH",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX6 gate refactor plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:58:35.417Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX6 gate refactor and reject diagnostics.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX6 gate refactor and reason codes",
+      "verification": {
+        "note": "Verified: gate predicates are separated, novelty check is pure, and structured reason codes/details are propagated to traces and decisions. Tests passed and simulation smoke run completed.",
+        "state": "ok",
+        "updated_at": "2026-02-10T22:08:24.668Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "TESTER",
+          "body": "Start: Adding FIX6 regression coverage and documentation updates for reason_codes/details and gate separation behavior."
+        },
+        {
+          "author": "TESTER",
+          "body": "Verified: added FIX6 regression tests and docs updates; full pytest suite passed and smoke run confirmed diagnostics output."
+        }
+      ],
+      "commit": {
+        "hash": "07d230dd01699a9690f1e637b6993f2cbbcb8d42",
+        "message": "✅ EJG6RH backend: implement FIX6 gate transparency and protocol diagnostics"
+      },
+      "depends_on": [],
+      "description": "Add regression coverage for reason codes and update documentation for gate diagnostics and policies.",
+      "dirty": false,
+      "doc": "## Summary\n\nAdd regression tests and documentation for FIX6 gates and diagnostics.\n\n## Scope\n\nIn scope: tests and docs updates for reason codes, step-aware refs, novelty purity, and schema diagnostics.\n\n## Plan\n\n1) Add tests for novelty gate correctness and step-specific refs behavior. 2) Add tests for invalid type/schema and structural disagreement reasons. 3) Update README and ARCHITECTURE docs with FIX6 diagnostics contract.\n\n## Risks\n\nRisk: tests may overfit internal names. Mitigation: assert stable reason code API and required details keys.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T22:08:24.660Z — VERIFY — ok\n\nBy: TESTER\n\nNote: Verified: FIX6 regressions and documentation updates added; pytest passed with PYTHONPATH=src and diagnostics output validated in smoke run.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T22:08:15.107Z, excerpt_hash=sha256:07eb16f72ece5b08b02fd17179c367a6820c99fcd70121917a9310c23b4bc199\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert tests/docs commit if it conflicts with approved behavior; keep behavior-driving code unchanged.\n\n## Context\n\nNeed clear auditability to avoid future magical reject situations.\n\n## Verify Steps\n\n1) python -m pytest tests -q\n\n## Notes\n\n### Decisions`n- Reason codes are treated as protocol surface and documented.",
+      "doc_updated_at": "2026-02-10T22:09:03.005Z",
+      "doc_updated_by": "TESTER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T22:08:15.107Z",
+          "author": "TESTER",
+          "from": "TODO",
+          "note": "Start: Adding FIX6 regression coverage and documentation updates for reason_codes/details and gate separation behavior.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T22:08:24.660Z",
+          "author": "TESTER",
+          "note": "Verified: FIX6 regressions and documentation updates added; pytest passed with PYTHONPATH=src and diagnostics output validated in smoke run.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T22:09:03.005Z",
+          "author": "TESTER",
+          "from": "DOING",
+          "note": "Verified: added FIX6 regression tests and docs updates; full pytest suite passed and smoke run confirmed diagnostics output.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102156-NCBE90",
+      "id_source": "generated",
+      "owner": "TESTER",
+      "plan_approval": {
+        "note": "Approved FIX6 tests/docs plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:58:35.385Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Added FIX6 tests and documentation for protocol diagnostics.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "Add FIX6 diagnostics tests and docs",
+      "verification": {
+        "note": "Verified: FIX6 regressions and documentation updates added; pytest passed with PYTHONPATH=src and diagnostics output validated in smoke run.",
+        "state": "ok",
+        "updated_at": "2026-02-10T22:08:24.660Z",
+        "updated_by": "TESTER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Implementing fact schema canonicalization and structural consistency checks for FIX6 candidate handling."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: fact schema/type/id canonicalization and structural consistency checks are enforced with explicit reject codes."
+        }
+      ],
+      "commit": {
+        "hash": "07d230dd01699a9690f1e637b6993f2cbbcb8d42",
+        "message": "✅ EJG6RH backend: implement FIX6 gate transparency and protocol diagnostics"
+      },
+      "depends_on": [],
+      "description": "Enforce strict fact schema/type/id normalization and candidate-level structural consistency handling.",
+      "dirty": false,
+      "doc": "## Summary\n\nEnforce strict fact schema canonicalization and structural consistency expectations.\n\n## Scope\n\nIn scope: src/pocwc/provers.py, src/pocwc/aggregation.py, src/pocwc/verifiers.py for canonical id/type and structural checks. Out of scope: changing world narrative content.\n\n## Plan\n\n1) Canonicalize fact_id and fact_type before scoring. 2) Enforce public_artifact schema with concrete artifact signal and evidence minimum. 3) Add consistency rejection reason when structural disagreement cannot be normalized.\n\n## Risks\n\nRisk: legacy outputs may fail stricter schema. Mitigation: normalize known variants and keep explicit fallback reason codes.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T22:08:24.726Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: strict fact schema/type checks and fact id/type consistency validation are enforced with canonicalized ids and explicit reject codes. Tests passed.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:58:47.118Z, excerpt_hash=sha256:a1b1b3f798b7196a76bf7cc34d3a28999f6ec025f1c65904e9491a6e75962510\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert schema/canonicalization commit and keep previous normalization if breakage is excessive.\n\n## Context\n\nFIX6 observed mismatched fact_id case and type disagreement across provers.\n\n## Verify Steps\n\n1) python -m pytest tests -q`n2) python scripts/run_simulation.py --steps 8 --db data/fix6_schema_smoke.db --seed 11\n\n## Notes\n\n### Decisions`n- Candidate validity is checked independently before aggregation-level acceptance.",
+      "doc_updated_at": "2026-02-10T22:09:02.947Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:58:47.118Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Implementing fact schema canonicalization and structural consistency checks for FIX6 candidate handling.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T22:08:24.726Z",
+          "author": "CODER",
+          "note": "Verified: strict fact schema/type checks and fact id/type consistency validation are enforced with canonicalized ids and explicit reject codes. Tests passed.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T22:09:02.947Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: fact schema/type/id canonicalization and structural consistency checks are enforced with explicit reject codes.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102156-X087WT",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX6 schema canonicalization plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:58:35.415Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX6 fact schema canonicalization and consistency checks.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX6 fact schema canonicalization",
+      "verification": {
+        "note": "Verified: strict fact schema/type checks and fact id/type consistency validation are enforced with canonicalized ids and explicit reject codes. Tests passed.",
+        "state": "ok",
+        "updated_at": "2026-02-10T22:08:24.726Z",
         "updated_by": "CODER"
       },
       "verify": []
