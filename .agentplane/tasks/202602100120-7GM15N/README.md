@@ -1,7 +1,8 @@
 ---
 id: "202602100120-7GM15N"
 title: "Add __pycache__ ignore rule"
-status: "DOING"
+result_summary: "Ignore rule added"
+status: "DONE"
 priority: "low"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T01:21:54.227Z"
   updated_by: "TESTER"
   note: "Confirmed .gitignore contains __pycache__/ and this task only introduces ignore-rule bookkeeping plus task artifact."
-commit: null
+commit:
+  hash: "74b1a9faa1b80813ddb09a97b6a4ce6a45dee7ea"
+  message: "✅ 7GM15N code: add __pycache__ to gitignore"
 comments:
   -
     author: "CODER"
     body: "Start: committing existing .gitignore update for __pycache__ exclusion."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: .gitignore now includes __pycache__/ so Python cache directories are excluded from repository noise."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Confirmed .gitignore contains __pycache__/ and this task only introduces ignore-rule bookkeeping plus task artifact."
+  -
+    type: "status"
+    at: "2026-02-10T01:22:13.536Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: .gitignore now includes __pycache__/ so Python cache directories are excluded from repository noise."
 doc_version: 2
-doc_updated_at: "2026-02-10T01:21:54.229Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T01:22:13.536Z"
+doc_updated_by: "INTEGRATOR"
 description: "Add __pycache__/ to .gitignore to keep Python cache artifacts out of git status."
 id_source: "generated"
 ---
