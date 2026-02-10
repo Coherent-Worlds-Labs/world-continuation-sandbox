@@ -68,6 +68,7 @@ def _render_progress(update: dict) -> None:
     decision_reasons = update.get("decision_reasons") or []
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
+    candidate_traces = update.get("candidate_traces") or []
     tension = str(update.get("deferred_tension") or "")
 
     narrative = scene if scene else artifact
@@ -93,6 +94,20 @@ def _render_progress(update: dict) -> None:
         print(_style("tension:", tension_preview, color="31"))
     if decision_reasons:
         print(_style("decision:", "; ".join(str(x) for x in decision_reasons), color="33"))
+    if candidate_traces:
+        for trace in candidate_traces:
+            print(
+                _style(
+                    "trace:",
+                    (
+                        f"{trace.get('prover_id')} "
+                        f"verdict={trace.get('verdict')} score={trace.get('score')} "
+                        f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
+                        + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
+                    ),
+                    color="90",
+                )
+            )
     if accepted_via_retry:
         print(_style("adaptive:", "accepted via retry threshold relaxation", color="32"))
     elif reject_streak > 0:
@@ -107,6 +122,8 @@ def main() -> None:
     parser.add_argument("--llm-provider", default=None, help="LLM provider (none|openrouter)")
     parser.add_argument("--llm-model", default=None, help="LLM model id for provider")
     parser.add_argument("--llm-base-url", default=None, help="Override provider base URL")
+    parser.add_argument("--llm-temperature", type=float, default=0.35, help="LLM sampling temperature")
+    parser.add_argument("--llm-top-p", type=float, default=1.0, help="LLM nucleus sampling top-p")
     parser.add_argument("--story-language", default="english", help="Requested story generation language")
     args = parser.parse_args()
 
@@ -118,6 +135,8 @@ def main() -> None:
             llm_provider=args.llm_provider,
             llm_model=args.llm_model,
             llm_base_url=args.llm_base_url,
+            llm_temperature=args.llm_temperature,
+            llm_top_p=args.llm_top_p,
             story_language=args.story_language,
         )
     )
@@ -127,6 +146,8 @@ def main() -> None:
         f"{_style('LLM:', llm_mode, color='35')} "
         f"{_style('provider:', str(llm['provider']), color='35')} "
         f"{_style('model:', str(llm['model'] or '-'), color='35')} "
+        f"{_style('temperature:', f'{args.llm_temperature:.2f}', color='35')} "
+        f"{_style('top_p:', f'{args.llm_top_p:.2f}', color='35')} "
         f"{_style('reason:', str(llm['reason']), color='35')}"
     )
     genesis = engine.get_genesis_snapshot()

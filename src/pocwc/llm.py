@@ -15,6 +15,7 @@ class LLMAdapter(Protocol):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.2,
+        top_p: float = 1.0,
         max_tokens: int = 900,
     ) -> dict[str, Any]:
         ...
@@ -76,8 +77,10 @@ class OpenRouterAdapter:
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.2,
+        top_p: float = 1.0,
         max_tokens: int = 900,
     ) -> dict[str, Any]:
+        top_p = max(0.1, min(top_p, 1.0))
         payload = {
             "model": self.settings.model,
             "messages": [
@@ -85,6 +88,7 @@ class OpenRouterAdapter:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": temperature,
+            "top_p": top_p,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
@@ -120,4 +124,3 @@ def create_llm_adapter(settings: LLMSettings) -> LLMAdapter | None:
     if settings.provider == "openrouter":
         return OpenRouterAdapter(settings)
     return None
-

@@ -28,6 +28,8 @@ class SimulationConfig:
     llm_provider: str | None = None
     llm_model: str | None = None
     llm_base_url: str | None = None
+    llm_temperature: float = 0.35
+    llm_top_p: float = 1.0
     story_language: str = "english"
 
 
@@ -60,7 +62,13 @@ class SimulationEngine:
             "model": llm_settings.model,
             "reason": llm_reason,
         }
-        self.provers = default_provers(self.rng, llm_adapter, config.story_language)
+        self.provers = default_provers(
+            self.rng,
+            llm_adapter,
+            config.story_language,
+            config.llm_temperature,
+            config.llm_top_p,
+        )
         self.verifiers = default_verifiers(self.rng, llm_adapter)
         self.aggregator = Aggregator()
         self.controller = DifficultyController(epoch=config.epoch)
@@ -479,6 +487,7 @@ class SimulationEngine:
             best_any_levels: dict[str, int] = {}
             best_any_reasons: list[str] = []
             accepted_via_retry = False
+            candidate_traces: list[dict[str, Any]] = []
 
             for index, prover in enumerate(self.provers, start=1):
                 candidate = prover.generate(challenge, index)
@@ -494,6 +503,17 @@ class SimulationEngine:
                     }
                 )
                 verdict, score, signals, levels, reasons = self._evaluate_candidate(challenge, candidate)
+                candidate_traces.append(
+                    {
+                        "prover_id": candidate.prover_id,
+                        "candidate_id": candidate.candidate_id,
+                        "score": round(score, 3),
+                        "verdict": verdict.value,
+                        "llm_used": bool(candidate.meta_m.get("llm_used", False)),
+                        "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
+                        "llm_error": str(candidate.meta_m.get("llm_error", "")),
+                    }
+                )
                 if score > best_any_score:
                     best_any_candidate = candidate
                     best_any_score = score
@@ -576,6 +596,7 @@ class SimulationEngine:
                         "candidate_artifact": candidate_artifact,
                         "candidate_score": round(best_any_score, 3) if best_any_score >= 0 else None,
                         "decision_reasons": best_any_reasons,
+                        "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,
                         "scene": story_bundle.get("scene", ""),

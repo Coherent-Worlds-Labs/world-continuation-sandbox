@@ -61,6 +61,18 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-provider openrouter --llm-model openai/gpt-4o-mini
 ```
 
+Control LLM sampling from CLI:
+
+```bash
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-provider openrouter --llm-model openai/gpt-4o-mini --llm-temperature 0.55 --llm-top-p 0.92
+```
+
+Runtime stream notes:
+
+- The CLI prints per-candidate traces with `llm_used=true|false`, source (`llm`, `llm_bundle_rebuilt`, or `fallback`), verdict, and score.
+- Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
+
 ### 2. Run API + UI
 
 ```bash

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,8 @@ class Prover:
     rng: random.Random
     llm: LLMAdapter | None = None
     story_language: str = "english"
+    llm_temperature: float = 0.35
+    llm_top_p: float = 1.0
 
     def generate(self, challenge: Challenge, ordinal: int) -> Candidate:
         base_strength = {
@@ -37,15 +40,34 @@ class Prover:
         artifact = self._bundle_to_artifact(bundle)
         meta = self._bundle_to_meta(bundle, strengths)
         meta["story_language_requested"] = self.story_language
+        meta["story_generation_source"] = "fallback"
+        meta["llm_used"] = False
 
         if self.llm is not None:
-            llm_payload = self._generate_with_llm(challenge, strengths)
+            llm_payload, llm_error = self._generate_with_llm(challenge, strengths)
+            if llm_error:
+                meta["llm_error"] = llm_error
             if llm_payload is not None:
-                artifact = str(llm_payload.get("artifact_x", artifact))
                 llm_bundle = llm_payload.get("bundle", bundle)
                 bundle = llm_bundle if isinstance(llm_bundle, dict) else bundle
+                llm_artifact = str(llm_payload.get("artifact_x", "")).strip()
+                rebuilt_artifact = self._bundle_to_artifact(bundle)
+                if self._is_informative_artifact(llm_artifact):
+                    artifact = llm_artifact
+                    source = "llm"
+                elif self._is_informative_artifact(rebuilt_artifact):
+                    artifact = rebuilt_artifact
+                    source = "llm_bundle_rebuilt"
+                    meta["llm_artifact_rejected"] = "placeholder_or_too_short"
+                else:
+                    source = "fallback"
+                    meta["llm_artifact_rejected"] = "placeholder_or_too_short"
                 meta = self._bundle_to_meta(bundle, strengths)
                 meta["story_language_requested"] = self.story_language
+                meta["story_generation_source"] = source
+                meta["llm_used"] = source.startswith("llm")
+                if llm_error:
+                    meta["llm_error"] = llm_error
 
         return Candidate(
             candidate_id=f"{challenge.challenge_id}-cand-{ordinal}",
@@ -110,7 +132,24 @@ class Prover:
             "story_bundle": bundle,
         }
 
-    def _generate_with_llm(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any] | None:
+    @staticmethod
+    def _is_informative_artifact(text: str) -> bool:
+        normalized = " ".join(text.split())
+        if len(normalized) < 80:
+            return False
+        if len(normalized.split()) < 12:
+            return False
+        lowered = normalized.lower()
+        placeholder_pattern = re.compile(
+            r"^(artifact[\s_\-]*x|артефакт[\s_\-]*х|артефакт[\s_\-]*x|placeholder|tbd|todo|n/?a)$"
+        )
+        if placeholder_pattern.match(lowered):
+            return False
+        if lowered in {"artifact_x", "артефакт_х", "артефакт_x"}:
+            return False
+        return True
+
+    def _generate_with_llm(self, challenge: Challenge, strengths: dict[str, float]) -> tuple[dict[str, Any] | None, str | None]:
         system = (
             "You generate PoCWC world continuations. Output valid JSON only. "
             "Do not reveal final truth."
@@ -125,15 +164,29 @@ class Prover:
             "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure."
         )
         try:
-            payload = self.llm.generate_json(system_prompt=system, user_prompt=prompt, temperature=0.35, max_tokens=1000)
+            payload = self.llm.generate_json(
+                system_prompt=system,
+                user_prompt=prompt,
+                temperature=self.llm_temperature,
+                top_p=self.llm_top_p,
+                max_tokens=1000,
+            )
         except Exception:  # noqa: BLE001
-            return None
-        return payload if isinstance(payload, dict) else None
+            return None, "llm_request_failed"
+        if not isinstance(payload, dict):
+            return None, "llm_payload_not_object"
+        return payload, None
 
 
-def default_provers(rng: random.Random, llm: LLMAdapter | None = None, story_language: str = "english") -> list[Prover]:
+def default_provers(
+    rng: random.Random,
+    llm: LLMAdapter | None = None,
+    story_language: str = "english",
+    llm_temperature: float = 0.35,
+    llm_top_p: float = 1.0,
+) -> list[Prover]:
     return [
-        Prover("prover-conservative", "conservative", rng, llm, story_language),
-        Prover("prover-aggressive", "aggressive", rng, llm, story_language),
-        Prover("prover-maintenance", "maintenance", rng, llm, story_language),
+        Prover("prover-conservative", "conservative", rng, llm, story_language, llm_temperature, llm_top_p),
+        Prover("prover-aggressive", "aggressive", rng, llm, story_language, llm_temperature, llm_top_p),
+        Prover("prover-maintenance", "maintenance", rng, llm, story_language, llm_temperature, llm_top_p),
     ]
