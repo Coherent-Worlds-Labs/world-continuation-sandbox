@@ -1,7 +1,8 @@
 ---
 id: "202602101632-JRQK7C"
 title: "Remove remaining world content from source code"
-status: "DOING"
+result_summary: "Source is world-content free"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -14,15 +15,20 @@ plan_approval:
   updated_by: "ORCHESTRATOR"
   note: "Approved strict world-content isolation in config."
 verification:
-  state: "pending"
-  updated_at: null
-  updated_by: null
-  note: null
-commit: null
+  state: "ok"
+  updated_at: "2026-02-10T16:41:29.359Z"
+  updated_by: "TESTER"
+  note: "Unit tests pass (12). Grep checks across world_config/orchestrator/provers show no world-content literals (Alice/E0/city archive/genesis title) in source."
+commit:
+  hash: "d87fda463cbe2f3590b2de95b99723353b137339"
+  message: "✅ JRQK7C backend: remove residual world literals from source"
 comments:
   -
     author: "CODER"
     body: "Start: removing residual world-content literals from source and enforcing config-only world content loading."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: world narrative constants were removed from source defaults, world config loader now sources content from JSON files, and source grep checks confirm no project-world literals remain in key runtime modules."
 events:
   -
     type: "status"
@@ -31,9 +37,22 @@ events:
     from: "TODO"
     to: "DOING"
     note: "Start: removing residual world-content literals from source and enforcing config-only world content loading."
+  -
+    type: "verify"
+    at: "2026-02-10T16:41:29.359Z"
+    author: "TESTER"
+    state: "ok"
+    note: "Unit tests pass (12). Grep checks across world_config/orchestrator/provers show no world-content literals (Alice/E0/city archive/genesis title) in source."
+  -
+    type: "status"
+    at: "2026-02-10T16:41:49.469Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: world narrative constants were removed from source defaults, world config loader now sources content from JSON files, and source grep checks confirm no project-world literals remain in key runtime modules."
 doc_version: 2
-doc_updated_at: "2026-02-10T16:39:08.238Z"
-doc_updated_by: "CODER"
+doc_updated_at: "2026-02-10T16:41:49.469Z"
+doc_updated_by: "INTEGRATOR"
 description: "Ensure world narrative/content exists only in config files by removing embedded world defaults and story constants from Python source."
 id_source: "generated"
 ---
@@ -54,6 +73,20 @@ If config file is missing/corrupt, startup may fail; mitigate with explicit load
 
 ## Verification
 
+### Plan
+
+### Results
+
+<!-- BEGIN VERIFICATION RESULTS -->
+#### 2026-02-10T16:41:29.359Z — VERIFY — ok
+
+By: TESTER
+
+Note: Unit tests pass (12). Grep checks across world_config/orchestrator/provers show no world-content literals (Alice/E0/city archive/genesis title) in source.
+
+VerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T16:39:08.238Z, excerpt_hash=sha256:cca3ead4fb4eeebc70b1df2667920ddedf301952a6109fda1ed573d7b846c95c
+
+<!-- END VERIFICATION RESULTS -->
 
 ## Rollback Plan
 
