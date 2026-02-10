@@ -1,7 +1,8 @@
 ---
 id: "202602101618-F855X5"
 title: "Externalize world-specific settings into world config"
-status: "DOING"
+result_summary: "World config externalization completed"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T16:24:35.479Z"
   updated_by: "TESTER"
   note: "Verified: tests and smoke runs passed for world-config externalization."
-commit: null
+commit:
+  hash: "8988d66f603af2187002337c782849a957d140f1"
+  message: "✅ F855X5 backend: externalize world settings into config"
 comments:
   -
     author: "CODER"
     body: "Start: moving world-specific setup from code into external config and wiring runtime loaders/CLI arguments."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: world-specific genesis/continuity/fallback settings now live in config/world.default.json with loader wiring; simulation and server accept --world-config and tests/smoke checks pass."
 events:
   -
     type: "status"
@@ -43,9 +49,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Verified: tests and smoke runs passed for world-config externalization."
+  -
+    type: "status"
+    at: "2026-02-10T16:25:42.815Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: world-specific genesis/continuity/fallback settings now live in config/world.default.json with loader wiring; simulation and server accept --world-config and tests/smoke checks pass."
 doc_version: 2
-doc_updated_at: "2026-02-10T16:24:35.481Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T16:25:42.815Z"
+doc_updated_by: "INTEGRATOR"
 description: "Move world-specific constants (genesis state, continuity defaults, fallback narrative templates) from code into a single external configuration file and wire runtime loading."
 id_source: "generated"
 ---
