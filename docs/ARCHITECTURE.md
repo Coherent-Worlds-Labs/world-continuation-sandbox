@@ -17,6 +17,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 8. `World Browser`: API routes + static frontend pages.
 9. `Narrative Continuity Memory`: branch-scoped summary plus per-state story events.
 10. `Anchor Registry`: persistent branch facts/anchors with references and introduced height.
+11. `Progress Diagnostics`: exposes fact-object progression signals (`max_fact_similarity`, `refs_quality`, novelty components) through CLI/API/UI.
 
 ## Data Model
 
@@ -44,7 +45,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 2. Select active branch.
 3. Build challenge from projection + directive + difficulty.
 4. Generate candidates from prover pool.
-5. Verify each candidate through cascade.
+5. Verify each candidate through cascade (fact-centric novelty gate plus general verifiers).
 6. Aggregate scores and accept only when both score threshold and hard progress gate are satisfied.
 7. Update branch metrics and optionally fork.
 8. Recompute metrics, including ontological stagnation, and retarget difficulty on epoch boundaries.
@@ -105,6 +106,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 ## Known Constraints
 
 - Verification is probabilistic and heuristic.
+- FIX3 progression guardrails are deterministic at gate level: hard fact-repeat reject, reference accumulation policy, and reject-streak escape mode.
 - L3 is simulated, not a real expensive external reasoning model.
 - No distributed consensus networking or cryptoeconomic security.
 - LLM provider calls require explicit API credentials and network availability; missing credentials trigger deterministic fallback.

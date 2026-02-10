@@ -75,6 +75,7 @@ def _render_progress(update: dict) -> None:
     decision_reasons = update.get("decision_reasons") or []
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
+    escape_mode = bool(update.get("escape_mode"))
     candidate_traces = update.get("candidate_traces") or []
     tension = str(update.get("deferred_tension") or "")
 
@@ -116,9 +117,10 @@ def _render_progress(update: dict) -> None:
                     (
                         f"{trace.get('prover_id')} "
                         f"verdict={trace.get('verdict')} score={trace.get('score')} raw={trace.get('raw_score')} "
-                        f"sim={trace.get('similarity')} penalty={trace.get('penalty')} "
-                        f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} progress_gate={trace.get('progress_gate')} "
-                        f"novelty={trace.get('novelty_score')} tension_prog={trace.get('tension_progress')} "
+                        f"sim={trace.get('similarity')} scene_sim={trace.get('scene_similarity')} penalty={trace.get('penalty')} "
+                        f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} refs_q={trace.get('refs_quality')} progress_gate={trace.get('progress_gate')} "
+                        f"novelty={trace.get('novelty_score')} (fact={trace.get('novel_fact')},type={trace.get('novel_type')},refs={trace.get('novel_refs')}) "
+                        f"tension_prog={trace.get('tension_progress')} escape={trace.get('escape_mode')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),
@@ -129,6 +131,8 @@ def _render_progress(update: dict) -> None:
         print(_style("adaptive:", "accepted via retry threshold relaxation", color="32"))
     elif reject_streak > 0:
         print(_style("adaptive:", f"reject streak={reject_streak}", color="31"))
+    if escape_mode:
+        print(_style("mode:", "escape mode active (forced concrete progression)", color="93"))
 
 
 def main() -> None:

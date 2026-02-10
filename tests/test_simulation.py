@@ -54,6 +54,7 @@ class SimulationTests(unittest.TestCase):
         self.assertGreaterEqual(len(updates), 1)
         for update in updates:
             self.assertIn("step_similarity", update)
+            self.assertIn("escape_mode", update)
             self.assertIn("candidate_traces", update)
             self.assertIn("new_fact_count", update)
             self.assertIn("novel_fact_ratio", update)
@@ -68,10 +69,16 @@ class SimulationTests(unittest.TestCase):
             self.assertGreaterEqual(len(traces), 1)
             for trace in traces:
                 self.assertIn("similarity", trace)
+                self.assertIn("fact_similarity", trace)
+                self.assertIn("scene_similarity", trace)
                 self.assertIn("penalty", trace)
                 self.assertIn("new_fact_count", trace)
+                self.assertIn("refs_quality", trace)
                 self.assertIn("progress_gate", trace)
                 self.assertIn("novelty_score", trace)
+                self.assertIn("novel_fact", trace)
+                self.assertIn("novel_type", trace)
+                self.assertIn("novel_refs", trace)
                 self.assertEqual(int(trace["new_fact_count"]), float(trace["new_fact_count"]))
 
     def test_directive_repetition_is_bounded(self) -> None:
@@ -142,6 +149,18 @@ class SimulationTests(unittest.TestCase):
         summary = engine.run(8)
         self.assertIn("controller", summary)
         self.assertIn("ontological_stagnation", summary["controller"])
+
+    def test_build_challenge_escape_mode_switches_policy(self) -> None:
+        db = Path("data/test_world_escape_mode.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=1, seed=14))
+        engine._seed_genesis()
+        branch = engine.store.get_branch("branch-main")
+        self.assertIsNotNone(branch)
+        challenge = engine._build_challenge(1, branch, reject_streak=3)
+        self.assertTrue(bool(challenge.verifier_policy.get("escape_mode")))
+        self.assertIn(challenge.directive_type, {"IntroduceAmbiguousFact", "AgentCommitment", "ResourceConstraint"})
 
 
 if __name__ == "__main__":

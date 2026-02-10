@@ -109,6 +109,30 @@ class SimulationEngine:
     def _semantic_similarity(self, a: str, b: str) -> float:
         return semantic_similarity(a, b, self.llm_adapter)
 
+    @staticmethod
+    def _fact_object_text(fact_object: Any) -> str:
+        if not isinstance(fact_object, dict):
+            return ""
+        ftype = str(fact_object.get("type", "")).strip()
+        content = str(fact_object.get("content", "")).strip()
+        evidence = fact_object.get("evidence", [])
+        if isinstance(evidence, list):
+            evidence_text = " ; ".join(str(x).strip() for x in evidence if str(x).strip())
+        else:
+            evidence_text = str(evidence).strip()
+        return f"{ftype}: {content} | {evidence_text}".strip()
+
+    def _state_fact_text(self, state: dict[str, Any] | None) -> str:
+        if not state:
+            return ""
+        meta = state.get("meta_m", {})
+        fact_text = self._fact_object_text(meta.get("fact_object", {}))
+        if fact_text:
+            return fact_text
+        story_bundle = meta.get("story_bundle", {})
+        scene = str(story_bundle.get("scene", "")).strip()
+        return scene or str(state.get("artifact_x", "")).strip()
+
     def _progression_int(self, key: str, default: int) -> int:
         try:
             return int(self.progression.get(key, default))
@@ -343,7 +367,7 @@ class SimulationEngine:
             }
         )
 
-    def _build_challenge(self, step: int, branch: dict[str, Any]) -> Challenge:
+    def _build_challenge(self, step: int, branch: dict[str, Any], reject_streak: int = 0) -> Challenge:
         branch_id = branch["branch_id"]
         states = self.store.list_states(branch_id=branch_id)
         artifacts = [s["artifact_x"] for s in states]
@@ -359,6 +383,16 @@ class SimulationEngine:
             recent_directives=recent_directives,
             required_families=required_families,
         )
+        escape_reject_streak = max(2, self._progression_int("escape_reject_streak", 2))
+        forced_directives = list(
+            self.progression.get(
+                "escape_directive_types",
+                ["IntroduceAmbiguousFact", "AgentCommitment", "ResourceConstraint"],
+            )
+        )
+        escape_mode = reject_streak >= escape_reject_streak
+        if escape_mode and forced_directives:
+            directive = self.rng.choice([str(x) for x in forced_directives if str(x).strip()] or [directive])
         if self.stagnation_streak >= 2:
             directive = self.rng.choice(["AgentCommitment", "ResourceConstraint", "InformationAsymmetry", "DelayedConsequence"])
         difficulty = self.taskgen.build_difficulty(
@@ -366,6 +400,14 @@ class SimulationEngine:
             signals,
             self.controller_state.mode,
         )
+        if escape_mode:
+            difficulty = Difficulty(
+                dependency_depth=difficulty.dependency_depth,
+                constraint_density=min(1.0, max(0.1, difficulty.constraint_density + 0.12)),
+                underspecification_level=max(0.1, difficulty.underspecification_level - 0.20),
+                future_fragility=difficulty.future_fragility,
+                novelty_budget=min(1.0, max(0.1, difficulty.novelty_budget + 0.10)),
+            )
         projection = self.projection.build(artifacts, difficulty.dependency_depth)
         story_memory = self.store.get_story_memory(branch_id)
         if story_memory:
@@ -378,6 +420,13 @@ class SimulationEngine:
                 f"{projection}\n\nRecent branch facts (avoid rephrasing these as new):\n"
                 + "\n".join(f"- {str(f.get('fact_text', ''))}" for f in recent_facts[:8])
             )
+        if escape_mode:
+            projection = (
+                f"{projection}\n\nBreak-glass mode:\n"
+                "Return strict JSON and force concrete progression. "
+                "fact_object.type must be from allowed enum, fact_object.content must describe one concrete event in 1-2 sentences, "
+                "and provide at least one explicit reference to a prior fact id when available."
+            )
         cadence_window = max(1, self._progression_int("fact_cadence_window", 3))
         required_min_new_facts = 1 if self.steps_since_new_fact >= cadence_window - 1 else 0
         dependency_target_depth = max(1, self._progression_int("dependency_target_depth", 4))
@@ -386,8 +435,20 @@ class SimulationEngine:
         enforce_dependency = difficulty.dependency_depth < dependency_target_depth
         current_height = int(states[-1]["height"]) + 1 if states else 1
         hard_similarity_threshold = self._progression_float("hard_similarity_threshold", 0.92)
+        scene_repeat_threshold = self._progression_float("scene_repeat_threshold", 0.97)
         min_refs_height_2 = max(1, self._progression_int("min_refs_height_2", 1))
         min_refs_height_5 = max(1, self._progression_int("min_refs_height_5", 2))
+        refs_quality_min_height_2 = self._progression_float("refs_quality_min_height_2", 0.8)
+        refs_quality_min_height_5 = self._progression_float("refs_quality_min_height_5", 1.2)
+        refs_quality_alpha = self._progression_float("refs_quality_alpha", 0.18)
+        novelty_min_early = self._progression_float("novelty_min_early", 0.45)
+        novelty_min_mid = self._progression_float("novelty_min_mid", 0.55)
+        novelty_min_late = self._progression_float("novelty_min_late", 0.60)
+        type_memory_window = self._progression_int("type_memory_window", 7)
+        refs_target = self._progression_int("refs_target", 2)
+        novelty_phase_early_end = self._progression_int("novelty_phase_early_end", 5)
+        novelty_phase_mid_end = self._progression_int("novelty_phase_mid_end", 20)
+        sim_fact_max = self._progression_float("sim_fact_max", hard_similarity_threshold)
         cid = f"challenge-{step:04d}-{branch_id}"
 
         challenge = Challenge(
@@ -401,13 +462,13 @@ class SimulationEngine:
                 "theta": self.controller_state.theta,
                 "cascade": "L0-L3",
                 "recent_narratives": recent_narratives,
-                "recent_fact_texts": [
-                    (
-                        f"{str(f.get('anchor_type', ''))} | {str(f.get('fact_text', ''))} | refs:"
-                        f"{','.join(str(x) for x in (f.get('references', []) if isinstance(f.get('references', []), list) else []))}"
-                    )
+                "recent_fact_texts": [f"{str(f.get('anchor_type', ''))}: {str(f.get('fact_text', ''))}" for f in recent_facts],
+                "recent_fact_types": [str(f.get("anchor_type", "")).strip() for f in recent_facts if str(f.get("anchor_type", "")).strip()],
+                "fact_height_by_id": {
+                    str(f.get("fact_id", "")).strip(): int(f.get("introduced_height", 0))
                     for f in recent_facts
-                ],
+                    if str(f.get("fact_id", "")).strip()
+                },
                 "active_anchor_ids": active_anchor_ids,
                 "recent_directives": recent_directives,
                 "required_families": required_families,
@@ -418,9 +479,22 @@ class SimulationEngine:
                 "enforce_dependency_accumulation": enforce_dependency,
                 "current_height": current_height,
                 "hard_similarity_threshold": hard_similarity_threshold,
+                "scene_repeat_threshold": scene_repeat_threshold,
                 "min_refs_height_2": min_refs_height_2,
                 "min_refs_height_5": min_refs_height_5,
+                "refs_quality_min_height_2": refs_quality_min_height_2,
+                "refs_quality_min_height_5": refs_quality_min_height_5,
+                "refs_quality_alpha": refs_quality_alpha,
+                "novelty_min_early": novelty_min_early,
+                "novelty_min_mid": novelty_min_mid,
+                "novelty_min_late": novelty_min_late,
+                "type_memory_window": type_memory_window,
+                "refs_target": refs_target,
+                "novelty_phase_early_end": novelty_phase_early_end,
+                "novelty_phase_mid_end": novelty_phase_mid_end,
+                "sim_fact_max": sim_fact_max,
                 "stagnation_streak": self.stagnation_streak,
+                "escape_mode": escape_mode,
             },
         )
 
@@ -476,6 +550,12 @@ class SimulationEngine:
 
         novelty_new_fact_count = int(float((novelty_result.signals.get("new_fact_count", 0.0) if novelty_result else 0.0)))
         novelty_reference_count = int(float((novelty_result.signals.get("reference_count", 0.0) if novelty_result else 0.0)))
+        novelty_refs_quality = float((novelty_result.signals.get("refs_quality", 0.0) if novelty_result else 0.0))
+        novelty_fact_similarity = float((novelty_result.signals.get("max_fact_similarity", 0.0) if novelty_result else 0.0))
+        novelty_scene_similarity = float((novelty_result.signals.get("max_scene_similarity", 0.0) if novelty_result else 0.0))
+        novelty_fact_delta = float((novelty_result.signals.get("novel_fact", 0.0) if novelty_result else 0.0))
+        novelty_type_delta = float((novelty_result.signals.get("novel_type", 0.0) if novelty_result else 0.0))
+        novelty_refs_delta = float((novelty_result.signals.get("novel_refs", 0.0) if novelty_result else 0.0))
         signal_means = {
             "closure_risk": round(sum(r.signals["closure_risk"] for r in results) / len(results), 3),
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
@@ -484,6 +564,12 @@ class SimulationEngine:
             "tension_progress": round(sum(tension_scores) / max(1, len(tension_scores)), 3),
             "new_fact_count": float(novelty_new_fact_count),
             "reference_count": float(novelty_reference_count),
+            "refs_quality": round(novelty_refs_quality, 3),
+            "max_fact_similarity": round(novelty_fact_similarity, 3),
+            "max_scene_similarity": round(novelty_scene_similarity, 3),
+            "novel_fact": round(novelty_fact_delta, 3),
+            "novel_type": round(novelty_type_delta, 3),
+            "novel_refs": round(novelty_refs_delta, 3),
             "progress_gate": 1.0 if progress_gate else 0.0,
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
@@ -561,6 +647,11 @@ class SimulationEngine:
     def _record_branch_facts(self, *, branch_id: str, state_id: str, state_height: int, facts: Any, fact_object: Any) -> None:
         canonical_facts: list[dict[str, Any]] = []
         if isinstance(fact_object, dict) and str(fact_object.get("id", "")).strip():
+            evidence_raw = fact_object.get("evidence", "")
+            if isinstance(evidence_raw, list):
+                evidence_text = " ; ".join(str(x).strip() for x in evidence_raw if str(x).strip())
+            else:
+                evidence_text = str(evidence_raw).strip()
             canonical_facts.append(
                 {
                     "fact_id": str(fact_object.get("id", "")).strip(),
@@ -570,7 +661,7 @@ class SimulationEngine:
                     "object": str(fact_object.get("content", "")).strip(),
                     "time_hint": str(fact_object.get("time", "")).strip(),
                     "location_hint": "",
-                    "evidence_type": str(fact_object.get("evidence", "")).strip(),
+                    "evidence_type": evidence_text,
                     "falsifiable": True,
                     "can_be_reinterpreted": True,
                     "references": list(fact_object.get("references", [])) if isinstance(fact_object.get("references", []), list) else [],
@@ -786,12 +877,11 @@ class SimulationEngine:
         total_steps = steps or self.config.steps
         existing_challenges = len(self.store.list_challenges())
         reject_streak = 0
-        previous_progress_narrative = ""
 
         for offset in range(1, total_steps + 1):
             step = existing_challenges + offset
             branch = self._choose_branch()
-            challenge = self._build_challenge(step, branch)
+            challenge = self._build_challenge(step, branch, reject_streak=reject_streak)
             self.runtime.attempted_challenges += 1
 
             accepted_candidate = None
@@ -806,6 +896,8 @@ class SimulationEngine:
             accepted_via_retry = False
             candidate_traces: list[dict[str, Any]] = []
             recent_narratives = self._recent_branch_narratives(branch["branch_id"], limit=6)
+            recent_facts = self._recent_branch_facts(branch["branch_id"], limit=120)
+            recent_fact_texts = [f"{str(f.get('anchor_type', '')).strip()}: {str(f.get('fact_text', '')).strip()}" for f in recent_facts]
 
             for index, prover in enumerate(self.provers, start=1):
                 candidate = prover.generate(challenge, index)
@@ -822,14 +914,18 @@ class SimulationEngine:
                 )
                 candidate_scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
                 candidate_text = candidate_scene or candidate.artifact_x
-                max_similarity = 0.0
+                candidate_fact_text = self._fact_object_text(candidate.meta_m.get("fact_object", {}))
+                max_fact_similarity = 0.0
+                max_scene_similarity = 0.0
+                if candidate_fact_text and recent_fact_texts:
+                    max_fact_similarity = max(self._semantic_similarity(candidate_fact_text, prev) for prev in recent_fact_texts)
                 if recent_narratives:
-                    max_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
-                hard_similarity_threshold = float(challenge.verifier_policy.get("hard_similarity_threshold", 0.92))
-                hard_repetition_fail = max_similarity >= hard_similarity_threshold
+                    max_scene_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
+                hard_similarity_threshold = float(challenge.verifier_policy.get("sim_fact_max", 0.92))
+                hard_repetition_fail = max_fact_similarity >= hard_similarity_threshold
                 novelty_penalty = 0.0
-                if max_similarity > 0.80:
-                    novelty_penalty = min(0.85, ((max_similarity - 0.80) / 0.20) ** 2 * 0.85)
+                if max_fact_similarity > 0.80:
+                    novelty_penalty = min(0.85, ((max_fact_similarity - 0.80) / 0.20) ** 2 * 0.85)
                 verdict, score, signals, levels, reasons = self._evaluate_candidate(
                     challenge,
                     candidate,
@@ -841,11 +937,11 @@ class SimulationEngine:
                 adjusted_reasons = list(reasons)
                 if novelty_penalty > 0:
                     adjusted_reasons.append(
-                        f"Repetition penalty applied (similarity={max_similarity:.2f}, penalty={novelty_penalty:.3f})"
+                        f"Repetition penalty applied (fact_similarity={max_fact_similarity:.2f}, penalty={novelty_penalty:.3f})"
                     )
                 if hard_repetition_fail:
                     adjusted_reasons.append(
-                        f"Hard repetition reject (similarity={max_similarity:.2f} >= threshold={hard_similarity_threshold:.2f})"
+                        f"Hard repetition reject (fact_similarity={max_fact_similarity:.2f} >= threshold={hard_similarity_threshold:.2f})"
                     )
 
                 candidate_traces.append(
@@ -854,17 +950,24 @@ class SimulationEngine:
                         "candidate_id": candidate.candidate_id,
                         "score": round(adjusted_score, 3),
                         "raw_score": round(score, 3),
-                        "similarity": round(max_similarity, 3),
+                        "similarity": round(max_fact_similarity, 3),
+                        "fact_similarity": round(max_fact_similarity, 3),
+                        "scene_similarity": round(max_scene_similarity, 3),
                         "penalty": round(novelty_penalty, 3),
                         "new_fact_count": int(signals.get("new_fact_count", 0.0)),
                         "reference_count": int(signals.get("reference_count", 0.0)),
+                        "refs_quality": round(float(signals.get("refs_quality", 0.0)), 3),
                         "progress_gate": int(signals.get("progress_gate", 0.0)),
                         "novelty_score": signals.get("novelty_score", 0.0),
+                        "novel_fact": signals.get("novel_fact", 0.0),
+                        "novel_type": signals.get("novel_type", 0.0),
+                        "novel_refs": signals.get("novel_refs", 0.0),
                         "tension_progress": signals.get("tension_progress", 0.0),
                         "verdict": adjusted_verdict.value,
                         "llm_used": bool(candidate.meta_m.get("llm_used", False)),
                         "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
                         "llm_error": str(candidate.meta_m.get("llm_error", "")),
+                        "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
                     }
                 )
                 if adjusted_score > best_any_score:
@@ -955,9 +1058,10 @@ class SimulationEngine:
                 head_node = self.store.get_state(head_id) if head_id else None
                 artifact = head_node["artifact_x"] if head_node else ""
                 story_bundle = (head_node or {}).get("meta_m", {}).get("story_bundle", {}) if head_node else {}
-                current_narrative = str(story_bundle.get("scene", "") or artifact)
-                step_similarity = self._semantic_similarity(previous_progress_narrative, current_narrative)
-                previous_progress_narrative = current_narrative
+                parent_node = self.store.get_state(head_node.get("parent_state_id")) if head_node and head_node.get("parent_state_id") else None
+                current_progress_text = self._state_fact_text(head_node)
+                parent_progress_text = self._state_fact_text(parent_node)
+                step_similarity = self._semantic_similarity(parent_progress_text, current_progress_text)
                 candidate_artifact = best_any_candidate.artifact_x if best_any_candidate is not None else ""
                 max_facts = max(1, self._progression_int("max_new_facts_per_step", 1))
                 active_anchor_count = len(self._active_anchor_ids(branch["branch_id"], limit=250))
@@ -987,6 +1091,7 @@ class SimulationEngine:
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,
+                        "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
                         "scene": story_bundle.get("scene", ""),
                         "deferred_tension": story_bundle.get("deferred_tension", ""),
                     }

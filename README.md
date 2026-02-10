@@ -78,16 +78,18 @@ python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-pr
 Runtime stream notes:
 
 - The CLI prints per-candidate traces with `llm_used=true|false`, source (`llm`, `llm_bundle_rebuilt`, or `fallback`), verdict, and score.
-- The stream also shows `step_similarity` and per-candidate novelty diagnostics (`sim`, `penalty`, `raw`, adjusted `score`) to make repetition visible.
+- The stream also shows fact-centric `step_similarity` and per-candidate novelty diagnostics (`fact_similarity`, `scene_similarity`, `refs_quality`, `novel_fact|novel_type|novel_refs`, `penalty`, `raw`, adjusted `score`) to make repetition visible.
 - The stream includes progression metrics: `new_fact_count` (integer), `novel_fact_ratio`, `semantic_delta`, `stagnation`, `ontological`, and active `anchors`.
 - Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
 - Diversify mode now pushes stronger novelty pressure: directives are biased toward non-maintenance events, prompt constraints require one concrete new event per step, and high overlap candidates receive a bounded repetition penalty.
+- After repeated rejections, deterministic escape mode activates and forces concrete directives plus stricter fact-object output requirements.
 
 Novelty contract:
 
 - Candidate generation must provide structured `novel_facts` and explicit change annotations (`what_changed_since_previous_step`, `why_not_rephrase`).
 - Candidate generation must provide a canonical `fact_object` (`id`, `type`, `content`, `introduced_by`, `time`, `evidence`, `interpretation_affinity`, `references`).
-- A dedicated novelty gate verifier rejects candidates with insufficient new facts, weak semantic delta, missing anchor IDs, or missing required references to prior anchors.
+- A dedicated novelty gate verifier is fact-first: novelty and hard-repeat checks are computed from canonical fact content, while scene similarity is only a secondary guard.
+- The novelty gate rejects candidates with weak fact novelty, invalid fact objects, or broken reference accumulation (`refs_count`/`refs_quality`) against branch anchors.
 - `AgentCommitment` directives require at least one persistent commitment anchor.
 - Final acceptance now requires both score threshold and `progress_gate=true`; high stylistic score without structural progress is rejected.
 

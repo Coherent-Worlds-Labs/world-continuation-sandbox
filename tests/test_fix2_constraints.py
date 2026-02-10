@@ -57,7 +57,7 @@ class Fix2ConstraintTests(unittest.TestCase):
             "content": "City clerk publishes a timestamped registry copy in the public ledger.",
             "introduced_by": "City clerk",
             "time": "midday",
-            "evidence": "report",
+            "evidence": ["report from public ledger"],
             "interpretation_affinity": {"I1": 0.2, "I2": 0.6, "I3": 0.2},
             "references": ["F_PREV_1"],
         }
@@ -101,7 +101,7 @@ class Fix2ConstraintTests(unittest.TestCase):
     def test_equivalent_fact_is_rejected(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(3), llm=None)
         challenge = self._challenge(
-            recent_fact_texts=["public_artifact | City clerk publishes a timestamped registry copy in the public ledger. | refs:F_PREV_1"]
+            recent_fact_texts=["public_artifact: City clerk publishes a timestamped registry copy in the public ledger. | report from public ledger"]
         )
         candidate = self._candidate()
         result = verifier.evaluate(challenge, candidate, allow_l3=False)

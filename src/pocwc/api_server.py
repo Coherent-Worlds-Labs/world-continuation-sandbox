@@ -182,6 +182,9 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
             for cand in candidates:
                 cid = str(cand.get("candidate_id", ""))
                 meta = cand.get("meta_m", {})
+                verification_rows = by_candidate.get(cid, [])
+                novelty_row = next((row for row in verification_rows if str(row.get("verifier_id", "")) == "verifier-novelty"), {})
+                novelty_signals = novelty_row.get("signals", {}) if isinstance(novelty_row, dict) else {}
                 payload.append(
                     {
                         "challenge_id": cand.get("challenge_id"),
@@ -190,7 +193,8 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
                         "status": cand.get("status"),
                         "fact_object": meta.get("fact_object", {}),
                         "what_changed_since_previous_step": meta.get("what_changed_since_previous_step", ""),
-                        "verification": by_candidate.get(cid, []),
+                        "novelty_signals": novelty_signals,
+                        "verification": verification_rows,
                     }
                 )
             self._json(payload)

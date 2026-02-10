@@ -75,8 +75,26 @@
     "stagnation_window": 6,
     "stagnation_threshold": 0.66,
     "hard_similarity_threshold": 0.92,
+    "sim_fact_max": 0.92,
+    "scene_repeat_threshold": 0.97,
     "min_refs_height_2": 1,
-    "min_refs_height_5": 2
+    "min_refs_height_5": 2,
+    "refs_quality_min_height_2": 0.8,
+    "refs_quality_min_height_5": 1.2,
+    "refs_quality_alpha": 0.18,
+    "novelty_min_early": 0.45,
+    "novelty_min_mid": 0.55,
+    "novelty_min_late": 0.6,
+    "novelty_phase_early_end": 5,
+    "novelty_phase_mid_end": 20,
+    "type_memory_window": 7,
+    "refs_target": 2,
+    "escape_reject_streak": 2,
+    "escape_directive_types": [
+      "IntroduceAmbiguousFact",
+      "AgentCommitment",
+      "ResourceConstraint"
+    ]
   },
   "fallback_generation": {
     "scene_templates": [

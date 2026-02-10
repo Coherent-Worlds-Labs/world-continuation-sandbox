@@ -32,7 +32,7 @@ class Prover:
             ).strip(),
             "introduced_by": str(fact.get("subject", "")).strip(),
             "time": str(fact.get("time_hint", "")).strip(),
-            "evidence": str(fact.get("evidence_type", "")).strip(),
+            "evidence": [str(fact.get("evidence_type", "")).strip()] if str(fact.get("evidence_type", "")).strip() else [],
             "interpretation_affinity": {
                 "I1": 0.2 if strongest != "I1" else 0.6,
                 "I2": 0.2 if strongest != "I2" else 0.6,
@@ -155,6 +155,8 @@ class Prover:
         active_anchor_ids = [str(x) for x in challenge.verifier_policy.get("active_anchor_ids", []) if str(x).strip()]
         max_refs = int(challenge.verifier_policy.get("required_reference_count", 2))
         references = active_anchor_ids[-max_refs:] if active_anchor_ids else []
+        if challenge.verifier_policy.get("escape_mode") and active_anchor_ids and not references:
+            references = [active_anchor_ids[-1]]
 
         anchor_type = "public_artifact"
         if challenge.directive_type == "AgentCommitment":
@@ -183,7 +185,7 @@ class Prover:
             "content": f"{primary_fact['subject']} {primary_fact['predicate']} {primary_fact['object']}",
             "introduced_by": primary_fact["subject"],
             "time": primary_fact["time_hint"],
-            "evidence": primary_fact["evidence_type"],
+            "evidence": [f"{primary_fact['evidence_type']} observed at {primary_fact['location_hint']}"],
             "interpretation_affinity": {
                 "I1": 0.2 if strongest != "I1" else 0.6,
                 "I2": 0.2 if strongest != "I2" else 0.6,
@@ -274,6 +276,7 @@ class Prover:
         return True
 
     def _generate_with_llm(self, challenge: Challenge, strengths: dict[str, float]) -> tuple[dict[str, Any] | None, str | None]:
+        escape_mode = bool(challenge.verifier_policy.get("escape_mode", False))
         system = (
             "You generate PoCWC world continuations. Output valid JSON only. "
             "Do not reveal final truth."
@@ -281,7 +284,7 @@ class Prover:
         prompt = (
             "Return JSON with keys: artifact_x (string), bundle (object with keys "
             "scene, surface_confirmation, alternative_compatibility[list], social_effect, deferred_tension), "
-            "fact_object (object with id,type,content,introduced_by,time,evidence,interpretation_affinity,references), "
+            "fact_object (object with id,type,content,introduced_by,time,evidence[list],interpretation_affinity,references), "
             "novel_facts (list with exactly one object containing fact_id,anchor_type,subject,predicate,object,time_hint,location_hint,evidence_type,falsifiable,can_be_reinterpreted,references[list]), "
             "what_changed_since_previous_step (string), why_not_rephrase (string), tension_progress (float 0..1). "
             f"Directive: {challenge.directive_type}. Style: {self.style}. "
@@ -292,6 +295,13 @@ class Prover:
             "Use one clearly named new fact only. Include references to prior anchor IDs when available. "
             "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement."
         )
+        if escape_mode:
+            prompt += (
+                " Escape mode is active: return strict concrete output. "
+                "fact_object.content must be 1-2 concrete sentences, avoid atmospheric abstractions, "
+                "include at least one observable consequence in fact_object.evidence, "
+                "and if prior anchors are available include at least one reference id."
+            )
         temp = self.llm_temperature + max(0.0, challenge.difficulty.novelty_budget - 0.5) * 0.4
         if challenge.directive_type in {
             "IntroduceAmbiguousFact",
@@ -300,6 +310,8 @@ class Prover:
             "AgentCommitment",
         }:
             temp += 0.08
+        if escape_mode:
+            temp = min(temp, 0.55)
         try:
             payload = self.llm.generate_json(
                 system_prompt=system,
