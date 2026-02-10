@@ -11,6 +11,45 @@ def _style(label: str, value: str, *, color: str = "36") -> str:
     return f"\033[{color}m{label}\033[0m {value}"
 
 
+def _render_genesis(snapshot: dict) -> None:
+    entities = ", ".join(str(x) for x in snapshot.get("entities", [])) or "-"
+    threads = ", ".join(str(x) for x in snapshot.get("threads", [])) or "-"
+    interpretation = snapshot.get("interpretation_strength", {})
+    interpretation_line = (
+        ", ".join(f"{k}={float(v):.2f}" for k, v in interpretation.items()) if interpretation else "-"
+    )
+    scene = " ".join(str(snapshot.get("scene") or "").split())
+    tension = " ".join(str(snapshot.get("deferred_tension") or "").split())
+    continuity = " ".join(str(snapshot.get("continuity_summary") or "").split())
+    baseline = (
+        f"debt={float(snapshot.get('semantic_debt_est', 0.0)):.3f}  "
+        f"uncertainty={float(snapshot.get('uncertainty', 0.0)):.3f}"
+    )
+    pressure = (
+        f"closure={float(snapshot.get('closure_pressure', 0.0)):.3f}  "
+        f"chaos={float(snapshot.get('chaos_pressure', 0.0)):.3f}"
+    )
+
+    print("\n\033[1;36m+-------------------------------- Genesis World State --------------------------------+\033[0m")
+    print(
+        f"{_style('branch:', str(snapshot.get('branch_id', '-')), color='35')}  "
+        f"{_style('state:', str(snapshot.get('genesis_state_id', '-')), color='35')}  "
+        f"{_style('height:', str(snapshot.get('height', '-')), color='35')}"
+    )
+    print(
+        f"{_style('baseline:', baseline, color='32')}  "
+        f"{_style('pressure:', pressure, color='32')}"
+    )
+    print(_style("entities:", entities, color="37"))
+    print(_style("threads:", threads, color="37"))
+    print(_style("interpretations:", interpretation_line, color="33"))
+    print(_style("scene:", scene if scene else "-", color="36"))
+    print(_style("tension:", tension if tension else "-", color="31"))
+    if continuity:
+        print(_style("continuity:", continuity, color="34"))
+    print("\033[1;36m+-------------------------------------------------------------------------------------+\033[0m")
+
+
 def _render_progress(update: dict) -> None:
     step = int(update["step"])
     total = int(update["total_steps"])
@@ -90,6 +129,8 @@ def main() -> None:
         f"{_style('model:', str(llm['model'] or '-'), color='35')} "
         f"{_style('reason:', str(llm['reason']), color='35')}"
     )
+    genesis = engine.get_genesis_snapshot()
+    _render_genesis(genesis)
     summary = engine.run(args.steps, progress_callback=_render_progress)
     print("\n\033[1;32m=== Final Summary ===\033[0m")
     print(json.dumps(summary, indent=2))

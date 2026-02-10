@@ -72,6 +72,34 @@ class SimulationEngine:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def get_genesis_snapshot(self) -> dict[str, Any]:
+        self._seed_genesis()
+        branch = self.store.get_branch("branch-main")
+        state = self.store.get_state("state-0")
+        memory = self.store.get_story_memory("branch-main")
+
+        if branch is None or state is None:
+            raise RuntimeError("Genesis state is unavailable")
+
+        meta_m = state.get("meta_m", {})
+        story_bundle = meta_m.get("story_bundle", {})
+        return {
+            "branch_id": branch["branch_id"],
+            "head_state_id": branch["head_state_id"],
+            "genesis_state_id": state["state_id"],
+            "height": state["height"],
+            "semantic_debt_est": branch["semantic_debt_est"],
+            "uncertainty": branch["uncertainty"],
+            "closure_pressure": branch["closure_pressure"],
+            "chaos_pressure": branch["chaos_pressure"],
+            "entities": meta_m.get("entities", []),
+            "threads": meta_m.get("threads", []),
+            "interpretation_strength": meta_m.get("interpretation_strength", {}),
+            "scene": story_bundle.get("scene", ""),
+            "deferred_tension": story_bundle.get("deferred_tension", ""),
+            "continuity_summary": (memory or {}).get("summary", ""),
+        }
+
     def _seed_genesis(self) -> None:
         branches = self.store.list_branches()
         if branches:
