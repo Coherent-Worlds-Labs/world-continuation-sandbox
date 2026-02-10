@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 import unittest
@@ -23,6 +23,7 @@ class Fix2ConstraintTests(unittest.TestCase):
             "enforce_dependency_accumulation": True,
             "current_height": 3,
             "hard_similarity_threshold": 0.92,
+            "min_refs_height_1": 0,
             "min_refs_height_2": 1,
             "min_refs_height_5": 2,
             "mode": "diversify",
@@ -32,6 +33,8 @@ class Fix2ConstraintTests(unittest.TestCase):
             "specificity_artifacts": ["document", "map", "record", "registry", "memo", "card"],
             "specificity_banned_terms": ["something", "some", "perhaps", "unknown"],
             "max_same_fact_type_diversify": 2,
+            "fact_type_enum": ["public_artifact", "witness", "measurement", "institutional_action", "resource_change", "agent_commitment"],
+            "public_artifact_min_evidence": 2,
         }
         policy.update(policy_overrides)
         return Challenge(
@@ -64,7 +67,7 @@ class Fix2ConstraintTests(unittest.TestCase):
             "content": "City clerk publishes a timestamped registry copy in the public ledger.",
             "introduced_by": "City clerk",
             "time": "midday",
-            "evidence": ["report from public ledger"],
+            "evidence": ["report from public ledger", "witness transcript in archive registry"],
             "interpretation_affinity": {"I1": 0.2, "I2": 0.6, "I3": 0.2},
             "references": ["F_PREV_1"],
         }
@@ -91,7 +94,7 @@ class Fix2ConstraintTests(unittest.TestCase):
         candidate = self._candidate(fact_object={"id": ""})
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
-        self.assertIn("invalid fact_object", result.notes)
+        self.assertIn("FACT_SCHEMA_INVALID", result.signals["reason_codes"])
 
     def test_reference_policy_rejects_missing_refs(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(2), llm=None)
@@ -103,27 +106,27 @@ class Fix2ConstraintTests(unittest.TestCase):
         candidate = self._candidate(novel_facts=[fact], fact_object=fact_object)
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
-        self.assertIn("reference accumulation policy violated", result.notes)
+        self.assertIn("PROGRESS_GATE_FAIL", result.signals["reason_codes"])
 
     def test_equivalent_fact_is_rejected(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(3), llm=None)
         challenge = self._challenge(
-            recent_fact_texts=["public_artifact: City clerk publishes a timestamped registry copy in the public ledger. | report from public ledger"]
+            recent_fact_texts=["public_artifact: City clerk publishes a timestamped registry copy in the public ledger. | report from public ledger ; witness transcript in archive registry"]
         )
         candidate = self._candidate()
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
-        self.assertIn("equivalent", result.notes)
+        self.assertIn("FACT_EQUIVALENT", result.signals["reason_codes"])
 
     def test_fact_type_outside_enum_is_rejected(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(4), llm=None)
         challenge = self._challenge()
         fact_object = self._candidate().meta_m["fact_object"]
-        fact_object["type"] = "факт"
+        fact_object["type"] = "unsupported_type"
         candidate = self._candidate(fact_object=fact_object)
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
-        self.assertIn("outside allowed enum", result.notes)
+        self.assertIn("TYPE_NOT_IN_ENUM", result.signals["reason_codes"])
 
     def test_fact_specificity_gate_rejects_vague_content(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(5), llm=None)
@@ -134,7 +137,52 @@ class Fix2ConstraintTests(unittest.TestCase):
         candidate = self._candidate(fact_object=fact_object)
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
-        self.assertIn("specificity", result.notes)
+        self.assertIn("FACT_SPECIFICITY_BELOW_MIN", result.signals["reason_codes"])
+
+    def test_step_one_does_not_require_refs(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(6), llm=None)
+        challenge = self._challenge(
+            current_height=1,
+            min_refs_height_1=0,
+            active_anchor_ids=[],
+            recent_fact_texts=[],
+            recent_narratives=[],
+            min_fact_specificity_score=2,
+        )
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["references"] = []
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.ACCEPT)
+        self.assertEqual(result.signals["progress_gate"], 1.0)
+
+    def test_structural_mismatch_is_rejected(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(7), llm=None)
+        challenge = self._challenge()
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["id"] = "F_NEW_X"
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("STRUCTURAL_INCONSISTENCY", result.signals["reason_codes"])
+
+    def test_high_novelty_progress_fail_not_reported_as_novelty_fail(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(8), llm=None)
+        challenge = self._challenge(
+            current_height=5,
+            min_refs_height_5=2,
+            required_reference_count=2,
+            active_anchor_ids=["F_PREV_1", "F_PREV_2", "F_PREV_3"],
+        )
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["references"] = []
+        fact_object["content"] = "City clerk publishes registry card 221 in north archive wing at 09:30."
+        fact_object["evidence"] = ["registry card 221 photographed in archive wing", "two witness logs reference card 221"]
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("PROGRESS_GATE_FAIL", result.signals["reason_codes"])
+        self.assertNotIn("NOVELTY_BELOW_MIN", result.signals["reason_codes"])
 
     def test_aggregator_hard_progress_gate(self):
         agg = Aggregator()

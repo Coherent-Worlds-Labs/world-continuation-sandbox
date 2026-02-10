@@ -54,10 +54,25 @@ class Prover:
         return normalized if normalized in cls._ALLOWED_FACT_TYPES else "public_artifact"
 
     @staticmethod
+    def _normalize_fact_id(raw: Any) -> str:
+        return str(raw or "").strip().upper()
+
+    @classmethod
+    def _normalize_fact_refs(cls, refs: Any) -> list[str]:
+        if not isinstance(refs, list):
+            return []
+        normalized: list[str] = []
+        for item in refs:
+            rid = cls._normalize_fact_id(item)
+            if rid and rid not in normalized:
+                normalized.append(rid)
+        return normalized
+
+    @staticmethod
     def _fact_object_from_legacy_fact(fact: dict[str, Any], strongest: str) -> dict[str, Any]:
         anchor_type = Prover._normalize_fact_type(fact.get("anchor_type", "public_artifact"))
         return {
-            "id": str(fact.get("fact_id", "")).strip(),
+            "id": Prover._normalize_fact_id(fact.get("fact_id", "")),
             "type": anchor_type,
             "content": (
                 f"{str(fact.get('subject', '')).strip()} "
@@ -72,14 +87,21 @@ class Prover:
                 "I2": 0.2 if strongest != "I2" else 0.6,
                 "I3": 0.2 if strongest != "I3" else 0.6,
             },
-            "references": list(fact.get("references", [])) if isinstance(fact.get("references", []), list) else [],
+            "references": Prover._normalize_fact_refs(fact.get("references", [])),
         }
 
     @staticmethod
     def _ensure_fact_object(bundle: dict[str, Any], strongest: str) -> None:
         fact_obj = bundle.get("fact_object")
         if isinstance(fact_obj, dict) and str(fact_obj.get("id", "")).strip():
+            fact_obj["id"] = Prover._normalize_fact_id(fact_obj.get("id", ""))
             fact_obj["type"] = Prover._normalize_fact_type(fact_obj.get("type", "public_artifact"))
+            fact_obj["references"] = Prover._normalize_fact_refs(fact_obj.get("references", []))
+            facts = bundle.get("novel_facts", [])
+            if isinstance(facts, list) and facts and isinstance(facts[0], dict):
+                facts[0]["fact_id"] = Prover._normalize_fact_id(facts[0].get("fact_id", fact_obj["id"]))
+                facts[0]["anchor_type"] = Prover._normalize_fact_type(facts[0].get("anchor_type", fact_obj["type"]))
+                facts[0]["references"] = Prover._normalize_fact_refs(facts[0].get("references", fact_obj["references"]))
             return
         facts = bundle.get("novel_facts", [])
         if isinstance(facts, list) and facts and isinstance(facts[0], dict):
@@ -121,7 +143,9 @@ class Prover:
                     bundle["novel_facts"] = novel_facts
                 fact_object = llm_payload.get("fact_object")
                 if isinstance(fact_object, dict):
+                    fact_object["id"] = self._normalize_fact_id(fact_object.get("id", ""))
                     fact_object["type"] = self._normalize_fact_type(fact_object.get("type", "public_artifact"))
+                    fact_object["references"] = self._normalize_fact_refs(fact_object.get("references", []))
                     bundle["fact_object"] = fact_object
                 bundle["what_changed_since_previous_step"] = str(
                     llm_payload.get("what_changed_since_previous_step", bundle.get("what_changed_since_previous_step", ""))
@@ -188,8 +212,8 @@ class Prover:
         fact_predicates = list(profile.get("fact_predicates", [])) or ["reported", "released", "discovered", "reclassified"]
         fact_objects = list(profile.get("fact_objects", [])) or ["a document", "an artifact", "a log discrepancy", "a sealed record"]
 
-        active_anchor_ids = [str(x) for x in challenge.verifier_policy.get("active_anchor_ids", []) if str(x).strip()]
-        last_fact_ids = [str(x) for x in challenge.verifier_policy.get("last_fact_ids", []) if str(x).strip()]
+        active_anchor_ids = [self._normalize_fact_id(x) for x in challenge.verifier_policy.get("active_anchor_ids", []) if self._normalize_fact_id(x)]
+        last_fact_ids = [self._normalize_fact_id(x) for x in challenge.verifier_policy.get("last_fact_ids", []) if self._normalize_fact_id(x)]
         anchor_pool = last_fact_ids or active_anchor_ids
         max_refs = int(challenge.verifier_policy.get("required_reference_count", 2))
         references = anchor_pool[-max_refs:] if anchor_pool else []
@@ -197,6 +221,7 @@ class Prover:
             references = [anchor_pool[-1]]
         if challenge.verifier_policy.get("escape_mode") and active_anchor_ids and not references:
             references = [active_anchor_ids[-1]]
+        references = self._normalize_fact_refs(references)
 
         anchor_type = "public_artifact"
         if challenge.directive_type == "InstitutionalAction":
@@ -208,7 +233,7 @@ class Prover:
 
         operation_code = f"R-{self.rng.randint(100, 999)}"
         primary_fact = {
-            "fact_id": f"{challenge.challenge_id}-f1-{self.prover_id[-4:]}",
+            "fact_id": self._normalize_fact_id(f"{challenge.challenge_id}-f1-{self.prover_id[-4:]}"),
             "anchor_type": anchor_type,
             "subject": self.rng.choice(fact_subject_pool),
             "predicate": self.rng.choice(fact_predicates),

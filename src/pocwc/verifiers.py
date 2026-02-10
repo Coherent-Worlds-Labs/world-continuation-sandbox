@@ -117,6 +117,26 @@ class NoveltyGateVerifier:
     )
 
     @staticmethod
+    def _canonical_fact_id(raw: Any) -> str:
+        return str(raw or "").strip().upper()
+
+    @staticmethod
+    def _canonical_fact_type(raw: Any, allowed_types: set[str]) -> str:
+        text = str(raw or "").strip().lower()
+        mapping = {
+            "fact": "public_artifact",
+            "new_fact": "public_artifact",
+            "artifact": "public_artifact",
+            "publicartifact": "public_artifact",
+            "measurement": "measurement",
+            "institution action": "institutional_action",
+            "resource change": "resource_change",
+            "agent commitment": "agent_commitment",
+        }
+        normalized = mapping.get(text, text.replace(" ", "_"))
+        return normalized if normalized in allowed_types else ""
+
+    @staticmethod
     def _canonical_fact_text_from_object(fact: dict[str, Any]) -> str:
         ftype = str(fact.get("type", "")).strip()
         content = str(fact.get("content", "")).strip()
@@ -216,6 +236,7 @@ class NoveltyGateVerifier:
         enforce_dependency_accumulation = bool(policy.get("enforce_dependency_accumulation", True))
         min_refs_at_height_2 = max(0, int(policy.get("min_refs_height_2", 1)))
         min_refs_at_height_5 = max(0, int(policy.get("min_refs_height_5", 2)))
+        min_refs_at_height_1 = max(0, int(policy.get("min_refs_height_1", 0)))
         hard_refs_from_step_2 = bool(policy.get("hard_refs_from_step_2", True))
         refs_quality_min_height_2 = max(0.0, float(policy.get("refs_quality_min_height_2", 0.8)))
         refs_quality_min_height_5 = max(0.0, float(policy.get("refs_quality_min_height_5", 1.2)))
@@ -227,7 +248,7 @@ class NoveltyGateVerifier:
         hard_fact_similarity_threshold = max(0.0, min(1.0, float(policy.get("sim_fact_max", self.hard_similarity_threshold))))
         scene_repeat_threshold = max(0.0, min(1.0, float(policy.get("scene_repeat_threshold", 0.97))))
         refs_target = max(1, int(policy.get("refs_target", 2)))
-        mode = str(policy.get("mode", "diversify"))
+        mode = str(policy.get("mode", "diversify")).strip().lower()
         max_same_fact_type_diversify = max(1, int(policy.get("max_same_fact_type_diversify", 2)))
         early_phase_end = max(1, int(policy.get("novelty_phase_early_end", 5)))
         mid_phase_end = max(early_phase_end + 1, int(policy.get("novelty_phase_mid_end", 20)))
@@ -241,6 +262,12 @@ class NoveltyGateVerifier:
         places = [str(x).strip() for x in policy.get("specificity_places", []) if str(x).strip()]
         artifact_terms = [str(x).strip() for x in policy.get("specificity_artifacts", []) if str(x).strip()]
         banned_terms = [str(x).strip() for x in policy.get("specificity_banned_terms", []) if str(x).strip()]
+        allowed_types = {
+            str(x).strip()
+            for x in policy.get("fact_type_enum", list(self.allowed_fact_types))
+            if str(x).strip()
+        } or set(self.allowed_fact_types)
+        public_artifact_min_evidence = max(1, int(policy.get("public_artifact_min_evidence", 2)))
 
         fact_object = candidate.meta_m.get("fact_object", {})
         fact_ok, fact_reason = self._fact_object_valid(fact_object) if isinstance(fact_object, dict) else (False, "fact_object missing")
@@ -249,7 +276,9 @@ class NoveltyGateVerifier:
         sim_fact = max((semantic_similarity(canonical_fact, prev, self.llm) for prev in recent_fact_texts), default=0.0)
         novel_fact = max(0.0, min(1.0, 1.0 - sim_fact))
 
-        fact_type = str((fact_object or {}).get("type", "")).strip() if isinstance(fact_object, dict) else ""
+        raw_fact_type = str((fact_object or {}).get("type", "")).strip() if isinstance(fact_object, dict) else ""
+        fact_type = self._canonical_fact_type(raw_fact_type, allowed_types)
+        fact_id = self._canonical_fact_id((fact_object or {}).get("id", "")) if isinstance(fact_object, dict) else ""
         last_types = recent_fact_types[-type_memory_window:] if recent_fact_types else []
         novel_type = 1.0 if fact_type and fact_type not in last_types else 0.0
 
@@ -295,13 +324,39 @@ class NoveltyGateVerifier:
 
         hard_fail = False
         reasons: list[str] = []
+        reason_codes: list[str] = []
+
+        def fail(code: str, message: str) -> None:
+            nonlocal hard_fail
+            hard_fail = True
+            reason_codes.append(code)
+            reasons.append(message)
+
+        # Structural consistency: fact_object and novel_facts[0] must agree after canonicalization.
+        novel_facts = candidate.meta_m.get("novel_facts", [])
+        if isinstance(novel_facts, list) and novel_facts and isinstance(novel_facts[0], dict):
+            nf = novel_facts[0]
+            nf_id = self._canonical_fact_id(nf.get("fact_id", ""))
+            nf_type = self._canonical_fact_type(nf.get("anchor_type", ""), allowed_types)
+            if nf_id and fact_id and nf_id != fact_id:
+                fail("STRUCTURAL_INCONSISTENCY", "fact id mismatch between fact_object and novel_facts")
+            if nf_type and fact_type and nf_type != fact_type:
+                fail("STRUCTURAL_INCONSISTENCY", "fact type mismatch between fact_object and novel_facts")
 
         if not fact_ok:
-            hard_fail = True
-            reasons.append(f"Novelty gate failed: invalid fact_object ({fact_reason})")
+            fail("FACT_SCHEMA_INVALID", f"invalid fact_object ({fact_reason})")
+        if not fact_type:
+            fail("TYPE_NOT_IN_ENUM", "fact_object.type is outside allowed enum")
         if fact_type in specificity_types and fact_specificity_score < specificity_min:
-            hard_fail = True
-            reasons.append("Novelty gate failed: fact specificity is below minimum")
+            fail("FACT_SPECIFICITY_BELOW_MIN", "fact specificity is below minimum")
+        if fact_type == "public_artifact":
+            artifact_hit = any(term.lower() in fact_content.lower() for term in artifact_terms) or any(
+                term.lower() in " ".join(evidence_items).lower() for term in artifact_terms
+            )
+            if not artifact_hit:
+                fail("FACT_SCHEMA_INVALID", "public_artifact is missing a concrete artifact/object signal")
+            if len(evidence_items) < public_artifact_min_evidence:
+                fail("EVIDENCE_TOO_WEAK", "public_artifact requires stronger evidence cardinality")
         if mode == "diversify":
             same_tail = 0
             for item in reversed(last_types):
@@ -310,23 +365,19 @@ class NoveltyGateVerifier:
                 else:
                     break
             if same_tail >= max_same_fact_type_diversify:
-                hard_fail = True
-                reasons.append("Novelty gate failed: repeated fact type exceeds diversify streak limit")
+                fail("TYPE_STREAK_EXCEEDED", "repeated fact type exceeds diversify streak limit")
         if unique_new > max_new_facts_per_step:
-            hard_fail = True
-            reasons.append("Novelty gate failed: too many new facts for one step")
-        if novelty_score < max(self.min_novelty_score, novelty_min):
-            hard_fail = True
-            reasons.append("Novelty gate failed: novelty below phase threshold")
+            fail("TOO_MANY_NEW_FACTS", "too many new facts for one step")
+        novelty_threshold = max(self.min_novelty_score, novelty_min)
+        novelty_gate = novelty_score >= novelty_threshold
+        if not novelty_gate:
+            fail("NOVELTY_BELOW_MIN", "novelty below phase threshold")
         if sim_fact > hard_fact_similarity_threshold:
-            hard_fail = True
-            reasons.append("Novelty gate failed: hard fact repetition threshold exceeded")
+            fail("FACT_REPETITION", "hard fact repetition threshold exceeded")
         if max_scene_similarity > scene_repeat_threshold and unique_new == 0:
-            hard_fail = True
-            reasons.append("Novelty gate failed: scene repeats without a new fact")
+            fail("SCENE_STAGNATION", "scene repeats without a new fact")
         if not str(candidate.meta_m.get("what_changed_since_previous_step", "")).strip():
-            hard_fail = True
-            reasons.append("Novelty gate failed: missing explicit change annotation")
+            fail("MISSING_CHANGE_ANNOTATION", "missing explicit change annotation")
 
         refs_min = 0
         refs_quality_min = 0.0
@@ -336,11 +387,14 @@ class NoveltyGateVerifier:
         elif current_height >= 2:
             refs_min = min_refs_at_height_2
             refs_quality_min = refs_quality_min_height_2
+        else:
+            refs_min = min_refs_at_height_1
         if hard_refs_from_step_2 and current_height >= 2:
             refs_min = max(1, refs_min)
+        refs_gate = True
         if (refs_count < refs_min) and (refs_quality < refs_quality_min) and len(active_anchor_ids) >= max(1, refs_min):
-            hard_fail = True
-            reasons.append("Novelty gate failed: reference accumulation policy violated")
+            refs_gate = False
+            fail("PROGRESS_GATE_FAIL", "reference accumulation policy violated")
 
         if (
             enforce_dependency_accumulation
@@ -348,19 +402,37 @@ class NoveltyGateVerifier:
             and len(active_anchor_ids) >= required_reference_count
             and refs_count < required_reference_count
         ):
-            hard_fail = True
-            reasons.append("Novelty gate failed: insufficient references to prior anchors")
+            refs_gate = False
+            fail("PROGRESS_GATE_FAIL", "insufficient references to prior anchors")
 
         if challenge.directive_type == "AgentCommitment" and commitment_count < 1:
-            hard_fail = True
-            reasons.append("Novelty gate failed: AgentCommitment directive requires commitment anchor")
+            fail("DIRECTIVE_CONTRACT_FAIL", "AgentCommitment directive requires commitment anchor")
         if self._equivalent_fact(fact_object if isinstance(fact_object, dict) else {}, recent_fact_texts):
-            hard_fail = True
-            reasons.append("Novelty gate failed: fact is equivalent to an existing anchor")
+            fail("FACT_EQUIVALENT", "fact is equivalent to an existing anchor")
+
+        progress_gate = refs_gate
+        schema_gate = 0.0 if any(code in {"FACT_SCHEMA_INVALID", "TYPE_NOT_IN_ENUM", "EVIDENCE_TOO_WEAK", "STRUCTURAL_INCONSISTENCY"} for code in reason_codes) else 1.0
+        evidence_gate = 0.0 if "EVIDENCE_TOO_WEAK" in reason_codes else 1.0
+        consistency_gate = 0.0 if "STRUCTURAL_INCONSISTENCY" in reason_codes else 1.0
 
         verdict = Verdict.REJECT if hard_fail else Verdict.ACCEPT
         score = max(0.0, min(1.0, novelty_score))
-        progress_gate = 0.0 if hard_fail else 1.0
+        reason_codes = list(dict.fromkeys(reason_codes))
+        reason_details = {
+            "novelty_total": round(novelty_score, 3),
+            "novelty_metric_compared": "novelty_score",
+            "novelty_min": round(novelty_threshold, 3),
+            "refs_min": int(refs_min),
+            "refs_count": int(refs_count),
+            "refs_quality": round(float(refs_quality), 3),
+            "refs_quality_min": round(float(refs_quality_min), 3),
+            "fact_specificity_score": int(fact_specificity_score),
+            "fact_specificity_min": int(specificity_min),
+            "fact_type": fact_type,
+            "fact_id": fact_id,
+            "evidence_count": len(evidence_items),
+            "current_height": current_height,
+        }
         return VerificationResult(
             candidate_id=candidate.candidate_id,
             verifier_id=self.verifier_id,
@@ -381,12 +453,18 @@ class NoveltyGateVerifier:
                 "novel_fact": round(novel_fact, 3),
                 "novel_type": round(novel_type, 3),
                 "novel_refs": round(novel_refs, 3),
-                "novelty_min_threshold": round(max(self.min_novelty_score, novelty_min), 3),
+                "novelty_min_threshold": round(novelty_threshold, 3),
                 "fact_specificity_score": float(fact_specificity_score),
-                "progress_gate": progress_gate,
+                "novelty_gate": 1.0 if novelty_gate else 0.0,
+                "progress_gate": 1.0 if progress_gate else 0.0,
+                "schema_gate": schema_gate,
+                "evidence_gate": evidence_gate,
+                "consistency_gate": consistency_gate,
                 "tension_progress": round(tension_progress, 3),
+                "reason_codes": reason_codes,
+                "reason_details": reason_details,
             },
-            notes="; ".join(reasons) if reasons else "novelty gate passed",
+            notes=("reject: " + ", ".join(reason_codes) + " | " + "; ".join(reasons)) if reasons else "novelty gate passed",
         )
 
     def _llm_novelty_estimate(

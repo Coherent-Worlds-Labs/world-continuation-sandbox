@@ -69,5 +69,5 @@ class VerificationResult:
     level_max_reached: VerificationLevel
     verdict: Verdict
     score: float
-    signals: dict[str, float]
+    signals: dict[str, Any]
     notes: str = ""

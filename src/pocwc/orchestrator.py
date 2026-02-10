@@ -459,6 +459,7 @@ class SimulationEngine:
         scene_repeat_threshold = self._progression_float("scene_repeat_threshold", 0.97)
         min_refs_height_2 = max(1, self._progression_int("min_refs_height_2", 1))
         min_refs_height_5 = max(1, self._progression_int("min_refs_height_5", 2))
+        min_refs_height_1 = max(0, self._progression_int("min_refs_height_1", 0))
         refs_quality_min_height_2 = self._progression_float("refs_quality_min_height_2", 0.8)
         refs_quality_min_height_5 = self._progression_float("refs_quality_min_height_5", 1.2)
         refs_quality_alpha = self._progression_float("refs_quality_alpha", 0.18)
@@ -494,6 +495,7 @@ class SimulationEngine:
                 ["document", "map", "photo", "record", "protocol", "fragment", "meter", "registry", "memo", "card"],
             )
         )
+        public_artifact_min_evidence = max(1, self._progression_int("public_artifact_min_evidence", 2))
         specificity_banned_terms = list(
             self.progression.get(
                 "specificity_banned_terms",
@@ -538,6 +540,7 @@ class SimulationEngine:
                 "scene_repeat_threshold": scene_repeat_threshold,
                 "min_refs_height_2": min_refs_height_2,
                 "min_refs_height_5": min_refs_height_5,
+                "min_refs_height_1": min_refs_height_1,
                 "refs_quality_min_height_2": refs_quality_min_height_2,
                 "refs_quality_min_height_5": refs_quality_min_height_5,
                 "refs_quality_alpha": refs_quality_alpha,
@@ -554,6 +557,7 @@ class SimulationEngine:
                 "specificity_places": specificity_places,
                 "specificity_artifacts": specificity_artifacts,
                 "specificity_banned_terms": specificity_banned_terms,
+                "public_artifact_min_evidence": public_artifact_min_evidence,
                 "novelty_phase_early_end": novelty_phase_early_end,
                 "novelty_phase_mid_end": novelty_phase_mid_end,
                 "sim_fact_max": sim_fact_max,
@@ -602,15 +606,27 @@ class SimulationEngine:
         novelty_scores = [float(r.signals.get("novelty_score", r.score)) for r in results]
         tension_scores = [float(r.signals.get("tension_progress", 0.5)) for r in results]
         novelty_result = next((r for r in results if r.verifier_id == "verifier-novelty"), None)
-        hard_fail = any("Novelty gate failed" in (r.notes or "") for r in results) or hard_repetition_fail
-        progress_gate = not hard_fail
+        novelty_score = float(novelty_result.signals.get("novelty_score", 0.0)) if novelty_result else (sum(novelty_scores) / max(1, len(novelty_scores)))
+        reason_codes = list(novelty_result.signals.get("reason_codes", [])) if novelty_result and isinstance(novelty_result.signals.get("reason_codes", []), list) else []
+        reason_details = (
+            dict(novelty_result.signals.get("reason_details", {}))
+            if novelty_result and isinstance(novelty_result.signals.get("reason_details", {}), dict)
+            else {}
+        )
+        hard_fail = bool(reason_codes) or hard_repetition_fail
+        progress_gate = bool(float(novelty_result.signals.get("progress_gate", 1.0))) if novelty_result else (not hard_fail)
+        if hard_repetition_fail and "FACT_REPETITION" not in reason_codes:
+            reason_codes.append("FACT_REPETITION")
+            reason_details["hard_repetition_fail"] = True
         decision = self.aggregator.decide(
             results,
-            novelty_score=sum(novelty_scores) / max(1, len(novelty_scores)),
+            novelty_score=novelty_score,
             tension_progress=sum(tension_scores) / max(1, len(tension_scores)),
             repetition_penalty=repetition_penalty,
             hard_fail=hard_fail,
             progress_gate=progress_gate,
+            failure_codes=reason_codes,
+            failure_details=reason_details,
         )
 
         novelty_new_fact_count = int(float((novelty_result.signals.get("new_fact_count", 0.0) if novelty_result else 0.0)))
@@ -626,7 +642,7 @@ class SimulationEngine:
             "closure_risk": round(sum(r.signals["closure_risk"] for r in results) / len(results), 3),
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
             "fragility_score": round(sum(r.signals["fragility_score"] for r in results) / len(results), 3),
-            "novelty_score": round(sum(novelty_scores) / max(1, len(novelty_scores)), 3),
+            "novelty_score": round(novelty_score, 3),
             "tension_progress": round(sum(tension_scores) / max(1, len(tension_scores)), 3),
             "new_fact_count": float(novelty_new_fact_count),
             "reference_count": float(novelty_reference_count),
@@ -638,6 +654,8 @@ class SimulationEngine:
             "novel_refs": round(novelty_refs_delta, 3),
             "fact_specificity_score": round(novelty_fact_specificity, 3),
             "progress_gate": 1.0 if progress_gate else 0.0,
+            "reason_codes": reason_codes,
+            "reason_details": reason_details,
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
 
@@ -980,6 +998,8 @@ class SimulationEngine:
             best_any_meta: dict[str, Any] = {}
             best_any_levels: dict[str, int] = {}
             best_any_reasons: list[str] = []
+            best_any_reason_codes: list[str] = []
+            best_any_reason_details: dict[str, Any] = {}
             accepted_via_retry = False
             candidate_traces: list[dict[str, Any]] = []
             recent_narratives = self._recent_branch_narratives(branch["branch_id"], limit=6)
@@ -1061,6 +1081,8 @@ class SimulationEngine:
                         "fact_refs": list(candidate.meta_m.get("fact_object", {}).get("references", []))
                         if isinstance(candidate.meta_m.get("fact_object", {}).get("references", []), list)
                         else [],
+                        "reason_codes": list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else [],
+                        "reason_details": dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {},
                     }
                 )
                 if adjusted_score > best_any_score:
@@ -1069,6 +1091,8 @@ class SimulationEngine:
                     best_any_meta = signals
                     best_any_levels = levels
                     best_any_reasons = adjusted_reasons
+                    best_any_reason_codes = list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else []
+                    best_any_reason_details = dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {}
                 if adjusted_verdict == Verdict.ACCEPT and adjusted_score > best_score:
                     accepted_candidate = candidate
                     best_score = adjusted_score
@@ -1185,6 +1209,8 @@ class SimulationEngine:
                         "ontological_stagnation": round(self.ontological_stagnation_score, 3),
                         "active_anchor_count": active_anchor_count,
                         "decision_reasons": best_any_reasons,
+                        "decision_reason_codes": best_any_reason_codes,
+                        "decision_reason_details": best_any_reason_details,
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,

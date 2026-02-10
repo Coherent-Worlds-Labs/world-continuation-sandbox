@@ -28,6 +28,8 @@ class Aggregator:
         repetition_penalty: float = 0.0,
         hard_fail: bool = False,
         progress_gate: bool = True,
+        failure_codes: list[str] | None = None,
+        failure_details: dict[str, object] | None = None,
     ) -> AggregateDecision:
         if not results:
             return AggregateDecision(Verdict.REJECT, 0.0, ["No verification results"], {})
@@ -52,7 +54,10 @@ class Aggregator:
 
         reasons: list[str] = []
         if hard_fail:
-            reasons.append("Hard fail: novelty gate")
+            code_text = ",".join(failure_codes or [])
+            reasons.append(f"Hard fail: protocol gates ({code_text})" if code_text else "Hard fail: protocol gates")
+            if failure_details:
+                reasons.append(f"details={failure_details}")
             verdict = Verdict.REJECT
         elif not progress_gate:
             reasons.append("Hard fail: progress gate")

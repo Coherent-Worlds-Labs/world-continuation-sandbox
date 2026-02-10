@@ -73,6 +73,8 @@ def _render_progress(update: dict) -> None:
     ontological_stagnation = float(update.get("ontological_stagnation") or 0.0)
     active_anchor_count = int(update.get("active_anchor_count") or 0)
     decision_reasons = update.get("decision_reasons") or []
+    decision_reason_codes = update.get("decision_reason_codes") or []
+    decision_reason_details = update.get("decision_reason_details") or {}
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
     escape_mode = bool(update.get("escape_mode"))
@@ -114,6 +116,10 @@ def _render_progress(update: dict) -> None:
         print(_style("tension:", tension_preview, color="31"))
     if decision_reasons:
         print(_style("decision:", "; ".join(str(x) for x in decision_reasons), color="33"))
+    if decision_reason_codes:
+        print(_style("reason_codes:", ", ".join(str(x) for x in decision_reason_codes), color="91"))
+    if decision_reason_details:
+        print(_style("reason_details:", str(decision_reason_details), color="90"))
     if candidate_traces:
         for trace in candidate_traces:
             print(
@@ -128,6 +134,8 @@ def _render_progress(update: dict) -> None:
                         f"fss={trace.get('fact_specificity_score')} "
                         f"tension_prog={trace.get('tension_progress')} escape={trace.get('escape_mode')} "
                         f"fact_id={trace.get('fact_id')} fact_type={trace.get('fact_type')} refs={trace.get('fact_refs')} "
+                        f"codes={trace.get('reason_codes')} "
+                        f"details={trace.get('reason_details')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),

@@ -55,6 +55,8 @@ class SimulationTests(unittest.TestCase):
         for update in updates:
             self.assertIn("step_similarity", update)
             self.assertIn("escape_mode", update)
+            self.assertIn("decision_reason_codes", update)
+            self.assertIn("decision_reason_details", update)
             self.assertIn("candidate_traces", update)
             self.assertIn("new_fact_count", update)
             self.assertIn("novel_fact_ratio", update)
@@ -79,6 +81,8 @@ class SimulationTests(unittest.TestCase):
                 self.assertIn("novel_fact", trace)
                 self.assertIn("novel_type", trace)
                 self.assertIn("novel_refs", trace)
+                self.assertIn("reason_codes", trace)
+                self.assertIn("reason_details", trace)
                 self.assertEqual(int(trace["new_fact_count"]), float(trace["new_fact_count"]))
 
     def test_directive_repetition_is_bounded(self) -> None:
