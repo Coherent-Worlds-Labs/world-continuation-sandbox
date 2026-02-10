@@ -1,6 +1,6 @@
 {
   "meta": {
-    "checksum": "cd8d245161cf67ac011512c44eede88e9f4f5f7933abf31edf53244f9e5b639e",
+    "checksum": "8415839382a820acd9b1a632664e5550dc77751db9ca7dd9c06a83cc4b7a2053",
     "checksum_algo": "sha256",
     "managed_by": "agentplane",
     "schema_version": 1
@@ -4558,6 +4558,152 @@
         "state": "ok",
         "updated_at": "2026-02-10T21:12:06.892Z",
         "updated_by": "ORCHESTRATOR"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Start: Close FIX5 tracking after implementation verification and export."
+        },
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Verified: FIX5 tracking completed; implementation finished and verification evidence captured."
+        }
+      ],
+      "commit": {
+        "hash": "8542421a6d11de1bcc8ef960fc1bfba4b708f695",
+        "message": "✅ 2ZYGS9 backend: implement FIX5 semantic progression hardening"
+      },
+      "depends_on": [
+        "202602102136-2ZYGS9"
+      ],
+      "description": "Track FIX5: concrete fact specificity, strict fact type enum, and scene stagnation breaker via institutional actions.",
+      "dirty": false,
+      "doc": "## Summary\n\nFIX5 implementation for semantic progression quality and anti-stagnation.\n\n## Scope\n\nIn-scope: taskgen/orchestrator/provers/verifiers/config/tests/docs updates.\n\n## Plan\n\n1. Add strict fact-type enum and normalization.\n2. Add fact-specificity hard gate and banned-vague checks.\n3. Add institutional-action directive and scene stagnation trigger.\n4. Add diversify type-streak rule and prompt constraints.\n5. Validate with pytest and smoke simulation.\n\n## Risks\n\nRisk: stricter gates may lower acceptance; mitigated by targeted stagnation breaker instead of threshold relaxation.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T21:49:03.555Z — VERIFY — ok\n\nBy: ORCHESTRATOR\n\nNote: Tracking verified: implementation task 202602102136-2ZYGS9 finished with commit 8542421 and test/smoke evidence recorded.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:48:48.321Z, excerpt_hash=sha256:ca4f850e6f0a12bcf84dc379cd17720ae6b1f91f8dc56819849ce46576d074ce\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert FIX5 commit and rerun tests if acceptance collapses or regressions appear.\n\n## Context\n\nFIX5 requires concrete fact impact, strict fact-type handling, and scene stagnation escape logic.\n\n## Verify Steps\n\n1. python -m pytest tests -q\n2. python scripts/run_simulation.py --steps 12 --db data/fix5_smoke.db --seed 10\n3. Confirm fact_type no longer falls to generic placeholders and scene stagnation breaker activates.\n\n## Notes\n\n### Approvals / Overrides\nNo overrides.\n\n### Decisions\nPrioritize semantic quality over permissive acceptance.\n\n### Implementation Notes\nPending.\n\n### Evidence / Links\nPending.",
+      "doc_updated_at": "2026-02-10T21:49:09.396Z",
+      "doc_updated_by": "ORCHESTRATOR",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:48:48.321Z",
+          "author": "ORCHESTRATOR",
+          "from": "TODO",
+          "note": "Start: Close FIX5 tracking after implementation verification and export.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T21:49:03.555Z",
+          "author": "ORCHESTRATOR",
+          "note": "Tracking verified: implementation task 202602102136-2ZYGS9 finished with commit 8542421 and test/smoke evidence recorded.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T21:49:09.396Z",
+          "author": "ORCHESTRATOR",
+          "from": "DOING",
+          "note": "Verified: FIX5 tracking completed; implementation finished and verification evidence captured.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102136-25JCEP",
+      "id_source": "generated",
+      "owner": "ORCHESTRATOR",
+      "plan_approval": {
+        "note": "Approved FIX5 tracking plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:37:27.827Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Closed FIX5 tracking task and ready for export.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "PoCWC FIX5 semantic progression hardening tracking",
+      "verification": {
+        "note": "Tracking verified: implementation task 202602102136-2ZYGS9 finished with commit 8542421 and test/smoke evidence recorded.",
+        "state": "ok",
+        "updated_at": "2026-02-10T21:49:03.555Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Implement FIX5 strict fact typing, specificity gates, and scene stagnation breaker behavior with tests."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: FIX5 implemented and validated (strict fact type enum, specificity gate, stagnation breaker, tests)."
+        }
+      ],
+      "commit": {
+        "hash": "8542421a6d11de1bcc8ef960fc1bfba4b708f695",
+        "message": "✅ 2ZYGS9 backend: implement FIX5 semantic progression hardening"
+      },
+      "depends_on": [],
+      "description": "Add strict fact type enum/normalization, fact specificity score hard gate, diversify type streak constraint, and scene stagnation breaker directive policy.",
+      "dirty": false,
+      "doc": "## Summary\n\nFIX5 implementation for semantic progression quality and anti-stagnation.\n\n## Scope\n\nIn-scope: taskgen/orchestrator/provers/verifiers/config/tests/docs updates.\n\n## Plan\n\n1. Add strict fact-type enum and normalization.\n2. Add fact-specificity hard gate and banned-vague checks.\n3. Add institutional-action directive and scene stagnation trigger.\n4. Add diversify type-streak rule and prompt constraints.\n5. Validate with pytest and smoke simulation.\n\n## Risks\n\nRisk: stricter gates may lower acceptance; mitigated by targeted stagnation breaker instead of threshold relaxation.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T21:47:03.152Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: FIX5 implemented with strict fact type enum, fact specificity hard gate, InstitutionalAction directive support, and scene stagnation breaker wiring. pytest 25/25 passed and 12-step smoke run completed.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:37:40.291Z, excerpt_hash=sha256:ca4f850e6f0a12bcf84dc379cd17720ae6b1f91f8dc56819849ce46576d074ce\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert FIX5 commit and rerun tests if acceptance collapses or regressions appear.\n\n## Context\n\nFIX5 requires concrete fact impact, strict fact-type handling, and scene stagnation escape logic.\n\n## Verify Steps\n\n1. python -m pytest tests -q\n2. python scripts/run_simulation.py --steps 12 --db data/fix5_smoke.db --seed 10\n3. Confirm fact_type no longer falls to generic placeholders and scene stagnation breaker activates.\n\n## Notes\n\n### Approvals / Overrides\nNo overrides.\n\n### Decisions\nPrioritize semantic quality over permissive acceptance.\n\n### Implementation Notes\nPending.\n\n### Evidence / Links\nPending.",
+      "doc_updated_at": "2026-02-10T21:48:41.666Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:37:40.291Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Implement FIX5 strict fact typing, specificity gates, and scene stagnation breaker behavior with tests.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T21:47:03.152Z",
+          "author": "CODER",
+          "note": "Verified: FIX5 implemented with strict fact type enum, fact specificity hard gate, InstitutionalAction directive support, and scene stagnation breaker wiring. pytest 25/25 passed and 12-step smoke run completed.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T21:48:41.666Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: FIX5 implemented and validated (strict fact type enum, specificity gate, stagnation breaker, tests).",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102136-2ZYGS9",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX5 implementation plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:37:40.181Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX5 semantic progression hardening.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX5 fact specificity and type enforcement",
+      "verification": {
+        "note": "Verified: FIX5 implemented with strict fact type enum, fact specificity hard gate, InstitutionalAction directive support, and scene stagnation breaker wiring. pytest 25/25 passed and 12-step smoke run completed.",
+        "state": "ok",
+        "updated_at": "2026-02-10T21:47:03.152Z",
+        "updated_by": "CODER"
       },
       "verify": []
     }
