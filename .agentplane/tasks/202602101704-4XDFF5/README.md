@@ -1,7 +1,8 @@
 ---
 id: "202602101704-4XDFF5"
 title: "Implement novelty-gated semantic progression for story steps"
-status: "TODO"
+result_summary: "Novelty-gated progression implemented"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,8 +19,13 @@ verification:
   updated_at: "2026-02-10T17:14:15.432Z"
   updated_by: "TESTER"
   note: "Unit tests pass (13). Runtime smoke shows novelty metrics and novelty-aware rejection reasons in decision/trace output."
-commit: null
-comments: []
+commit:
+  hash: "aa7ef15d5d9678ff42e8ed0d0a09687cbcfcd973"
+  message: "✅ 4XDFF5 backend: add novelty gate and fact progression controls"
+comments:
+  -
+    author: "INTEGRATOR"
+    body: "Verified: structured novel facts, branch fact registry, novelty gate hard-fail checks, multi-objective aggregation, anti-stagnation control, and runtime novelty metrics are implemented and validated via tests/smoke output."
 events:
   -
     type: "verify"
@@ -27,9 +33,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Unit tests pass (13). Runtime smoke shows novelty metrics and novelty-aware rejection reasons in decision/trace output."
+  -
+    type: "status"
+    at: "2026-02-10T17:16:10.316Z"
+    author: "INTEGRATOR"
+    from: "TODO"
+    to: "DONE"
+    note: "Verified: structured novel facts, branch fact registry, novelty gate hard-fail checks, multi-objective aggregation, anti-stagnation control, and runtime novelty metrics are implemented and validated via tests/smoke output."
 doc_version: 2
-doc_updated_at: "2026-02-10T17:14:15.435Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T17:16:10.316Z"
+doc_updated_by: "INTEGRATOR"
 description: "Add fact registry, novelty contract, novelty verifier gate, multi-objective aggregation, anti-stagnation control, and runtime novelty metrics to block paraphrase-only progress."
 id_source: "generated"
 ---
