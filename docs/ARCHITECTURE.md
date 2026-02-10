@@ -45,7 +45,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 3. Build challenge from projection + directive + difficulty.
 4. Generate candidates from prover pool.
 5. Verify each candidate through cascade.
-6. Aggregate scores and accept or reject.
+6. Aggregate scores and accept only when both score threshold and hard progress gate are satisfied.
 7. Update branch metrics and optionally fork.
 8. Recompute metrics, including ontological stagnation, and retarget difficulty on epoch boundaries.
 
@@ -100,6 +100,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - `GET /api/story/summary?branch_id=branch-main`
 - `GET /api/story?branch_id=branch-main&limit=200`
 - `GET /api/facts/active?branch_id=branch-main&limit=200`
+- `GET /api/progress/diagnostics?branch_id=branch-main&limit=50`
 
 ## Known Constraints
 

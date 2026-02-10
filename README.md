@@ -86,8 +86,10 @@ Runtime stream notes:
 Novelty contract:
 
 - Candidate generation must provide structured `novel_facts` and explicit change annotations (`what_changed_since_previous_step`, `why_not_rephrase`).
+- Candidate generation must provide a canonical `fact_object` (`id`, `type`, `content`, `introduced_by`, `time`, `evidence`, `interpretation_affinity`, `references`).
 - A dedicated novelty gate verifier rejects candidates with insufficient new facts, weak semantic delta, missing anchor IDs, or missing required references to prior anchors.
 - `AgentCommitment` directives require at least one persistent commitment anchor.
+- Final acceptance now requires both score threshold and `progress_gate=true`; high stylistic score without structural progress is rejected.
 
 ### 2. Run API + UI
 

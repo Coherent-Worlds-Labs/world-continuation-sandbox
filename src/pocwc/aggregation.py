@@ -27,6 +27,7 @@ class Aggregator:
         tension_progress: float = 0.5,
         repetition_penalty: float = 0.0,
         hard_fail: bool = False,
+        progress_gate: bool = True,
     ) -> AggregateDecision:
         if not results:
             return AggregateDecision(Verdict.REJECT, 0.0, ["No verification results"], {})
@@ -52,6 +53,9 @@ class Aggregator:
         reasons: list[str] = []
         if hard_fail:
             reasons.append("Hard fail: novelty gate")
+            verdict = Verdict.REJECT
+        elif not progress_gate:
+            reasons.append("Hard fail: progress gate")
             verdict = Verdict.REJECT
         elif len(rejects) >= self.reject_quorum:
             reasons.append("Reject quorum reached")

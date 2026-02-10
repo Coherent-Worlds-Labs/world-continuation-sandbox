@@ -52,6 +52,7 @@ async function loadStory() {
   const summary = await fetchJson(`/api/story/summary?branch_id=${encodeURIComponent(branch)}`);
   const events = await fetchJson(`/api/story?branch_id=${encodeURIComponent(branch)}&limit=200`);
   const facts = await fetchJson(`/api/facts/active?branch_id=${encodeURIComponent(branch)}&limit=200`);
+  const diagnostics = await fetchJson(`/api/progress/diagnostics?branch_id=${encodeURIComponent(branch)}&limit=50`);
 
   document.getElementById("storySummary").textContent = JSON.stringify(summary, null, 2);
   renderList(
@@ -64,6 +65,7 @@ async function loadStory() {
     facts,
     (f) => `h${f.introduced_height} | ${f.fact_id} | ${f.anchor_type} | ${f.subject} ${f.predicate} ${f.object} | refs: ${(f.references || []).join(", ")}`
   );
+  document.getElementById("progressDiagnostics").textContent = JSON.stringify(diagnostics.slice(-12), null, 2);
 }
 
 document.getElementById("loadStates").addEventListener("click", () => loadStates().catch(console.error));

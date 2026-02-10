@@ -158,6 +158,44 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
             self._json(self.store.list_active_facts(branch_id, limit=limit))
             return
 
+        if path == "/api/progress/diagnostics":
+            qs = parse_qs(parsed.query)
+            branch_id = qs.get("branch_id", ["branch-main"])[0]
+            limit_raw = qs.get("limit", ["30"])[0]
+            try:
+                limit = int(limit_raw)
+            except ValueError:
+                limit = 30
+            challenges = self.store.list_challenges(branch_id=branch_id)[-max(1, min(limit, 200)) :]
+            challenge_ids = {str(ch.get("challenge_id", "")) for ch in challenges}
+            candidates = [
+                c
+                for c in self.store.list_candidates()
+                if str(c.get("challenge_id", "")) in challenge_ids
+            ]
+            by_candidate = {str(c.get("candidate_id", "")): [] for c in candidates}
+            for row in self.store.list_verification_results():
+                cid = str(row.get("candidate_id", ""))
+                if cid in by_candidate:
+                    by_candidate[cid].append(row)
+            payload = []
+            for cand in candidates:
+                cid = str(cand.get("candidate_id", ""))
+                meta = cand.get("meta_m", {})
+                payload.append(
+                    {
+                        "challenge_id": cand.get("challenge_id"),
+                        "candidate_id": cid,
+                        "prover_id": cand.get("prover_id"),
+                        "status": cand.get("status"),
+                        "fact_object": meta.get("fact_object", {}),
+                        "what_changed_since_previous_step": meta.get("what_changed_since_previous_step", ""),
+                        "verification": by_candidate.get(cid, []),
+                    }
+                )
+            self._json(payload)
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
 

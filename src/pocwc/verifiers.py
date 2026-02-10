@@ -105,6 +105,7 @@ class NoveltyGateVerifier:
     rng: random.Random
     llm: LLMAdapter | None = None
     min_novelty_score: float = 0.30
+    hard_similarity_threshold: float = 0.92
 
     @staticmethod
     def _fact_text(fact: dict[str, Any]) -> str:
@@ -132,6 +133,37 @@ class NoveltyGateVerifier:
             normalized.append(item)
         return normalized
 
+    @staticmethod
+    def _fact_object_valid(fact: dict[str, Any]) -> tuple[bool, str]:
+        required = ["id", "type", "content", "introduced_by", "time", "evidence", "interpretation_affinity", "references"]
+        missing = [key for key in required if key not in fact]
+        if missing:
+            return False, f"missing fields: {', '.join(missing)}"
+        if not str(fact.get("id", "")).strip():
+            return False, "id is empty"
+        if not str(fact.get("type", "")).strip():
+            return False, "type is empty"
+        content = str(fact.get("content", "")).strip()
+        if len(content.split()) < 4:
+            return False, "content is too short"
+        affinity = fact.get("interpretation_affinity")
+        if not isinstance(affinity, dict):
+            return False, "interpretation_affinity must be an object"
+        refs = fact.get("references")
+        if not isinstance(refs, list):
+            return False, "references must be a list"
+        return True, ""
+
+    def _equivalent_fact(self, fact: dict[str, Any], recent_facts: list[str]) -> bool:
+        content = str(fact.get("content", "")).strip()
+        ftype = str(fact.get("type", "")).strip()
+        ref_text = ",".join(str(x) for x in fact.get("references", []))
+        probe = f"{ftype} | {content} | refs:{ref_text}"
+        if not probe.strip():
+            return False
+        max_sim = max((semantic_similarity(probe, prev, self.llm) for prev in recent_facts), default=0.0)
+        return max_sim >= 0.93
+
     def evaluate(self, challenge: Challenge, candidate: Candidate, allow_l3: bool = False) -> VerificationResult:
         _ = allow_l3
         policy = challenge.verifier_policy
@@ -143,8 +175,13 @@ class NoveltyGateVerifier:
         dependency_target_depth = max(1, int(policy.get("dependency_target_depth", 4)))
         required_reference_count = max(1, int(policy.get("required_reference_count", 2)))
         enforce_dependency_accumulation = bool(policy.get("enforce_dependency_accumulation", True))
+        min_refs_at_height_2 = max(1, int(policy.get("min_refs_height_2", 1)))
+        min_refs_at_height_5 = max(1, int(policy.get("min_refs_height_5", 2)))
+        current_height = max(1, int(policy.get("current_height", 1)))
 
         facts = self._normalized_facts(candidate)
+        fact_object = candidate.meta_m.get("fact_object", {})
+        fact_ok, fact_reason = self._fact_object_valid(fact_object) if isinstance(fact_object, dict) else (False, "fact_object missing")
 
         unique_new = 0
         named_count = 0
@@ -169,7 +206,9 @@ class NoveltyGateVerifier:
                 commitment_count += 1
 
         scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
-        semantic_delta = 1.0 - max((semantic_similarity(scene, prev, self.llm) for prev in recent_narratives), default=0.0)
+        max_scene_similarity = max((semantic_similarity(scene, prev, self.llm) for prev in recent_narratives), default=0.0)
+        similarity_threshold = float(policy.get("hard_similarity_threshold", self.hard_similarity_threshold))
+        semantic_delta = 1.0 - max_scene_similarity
 
         llm_novelty = self._llm_novelty_estimate(challenge, candidate, recent_narratives)
         novelty_score = llm_novelty if llm_novelty is not None else semantic_delta
@@ -178,6 +217,9 @@ class NoveltyGateVerifier:
         hard_fail = False
         reasons: list[str] = []
 
+        if not fact_ok:
+            hard_fail = True
+            reasons.append(f"Novelty gate failed: invalid fact_object ({fact_reason})")
         if named_count != len(facts):
             hard_fail = True
             reasons.append("Novelty gate failed: every fact must have a non-empty fact_id")
@@ -190,6 +232,9 @@ class NoveltyGateVerifier:
         if novelty_score < self.min_novelty_score:
             hard_fail = True
             reasons.append("Novelty gate failed: semantic delta below threshold")
+        if max_scene_similarity > similarity_threshold:
+            hard_fail = True
+            reasons.append("Novelty gate failed: hard repetition threshold exceeded")
         if not str(candidate.meta_m.get("what_changed_since_previous_step", "")).strip():
             hard_fail = True
             reasons.append("Novelty gate failed: missing explicit change annotation")
@@ -206,9 +251,22 @@ class NoveltyGateVerifier:
         if challenge.directive_type == "AgentCommitment" and commitment_count < 1:
             hard_fail = True
             reasons.append("Novelty gate failed: AgentCommitment directive requires commitment anchor")
+        if self._equivalent_fact(fact_object if isinstance(fact_object, dict) else {}, recent_facts):
+            hard_fail = True
+            reasons.append("Novelty gate failed: fact is equivalent to an existing anchor")
+
+        required_refs_by_height = 0
+        if current_height >= 5:
+            required_refs_by_height = min_refs_at_height_5
+        elif current_height >= 2:
+            required_refs_by_height = min_refs_at_height_2
+        if required_refs_by_height > 0 and len(referenced_anchors) < required_refs_by_height and len(active_anchor_ids) >= required_refs_by_height:
+            hard_fail = True
+            reasons.append("Novelty gate failed: reference accumulation policy violated")
 
         verdict = Verdict.REJECT if hard_fail else Verdict.ACCEPT
         score = max(0.0, min(1.0, novelty_score))
+        progress_gate = 0.0 if hard_fail else 1.0
         return VerificationResult(
             candidate_id=candidate.candidate_id,
             verifier_id=self.verifier_id,
@@ -223,6 +281,8 @@ class NoveltyGateVerifier:
                 "new_fact_count": float(int(unique_new)),
                 "named_fact_count": float(int(named_count)),
                 "reference_count": float(int(len(referenced_anchors))),
+                "max_scene_similarity": round(max_scene_similarity, 3),
+                "progress_gate": progress_gate,
                 "tension_progress": round(tension_progress, 3),
             },
             notes="; ".join(reasons) if reasons else "novelty gate passed",

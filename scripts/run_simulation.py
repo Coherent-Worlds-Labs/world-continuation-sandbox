@@ -117,7 +117,8 @@ def _render_progress(update: dict) -> None:
                         f"{trace.get('prover_id')} "
                         f"verdict={trace.get('verdict')} score={trace.get('score')} raw={trace.get('raw_score')} "
                         f"sim={trace.get('similarity')} penalty={trace.get('penalty')} "
-                        f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} novelty={trace.get('novelty_score')} tension_prog={trace.get('tension_progress')} "
+                        f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} progress_gate={trace.get('progress_gate')} "
+                        f"novelty={trace.get('novelty_score')} tension_prog={trace.get('tension_progress')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),

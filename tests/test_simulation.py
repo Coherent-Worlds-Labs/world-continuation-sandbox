@@ -70,6 +70,7 @@ class SimulationTests(unittest.TestCase):
                 self.assertIn("similarity", trace)
                 self.assertIn("penalty", trace)
                 self.assertIn("new_fact_count", trace)
+                self.assertIn("progress_gate", trace)
                 self.assertIn("novelty_score", trace)
                 self.assertEqual(int(trace["new_fact_count"]), float(trace["new_fact_count"]))
 

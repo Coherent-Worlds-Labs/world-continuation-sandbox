@@ -20,6 +20,36 @@ class Prover:
     llm_top_p: float = 1.0
     world_profile: dict[str, Any] | None = None
 
+    @staticmethod
+    def _fact_object_from_legacy_fact(fact: dict[str, Any], strongest: str) -> dict[str, Any]:
+        return {
+            "id": str(fact.get("fact_id", "")).strip(),
+            "type": str(fact.get("anchor_type", "public_artifact")).strip() or "public_artifact",
+            "content": (
+                f"{str(fact.get('subject', '')).strip()} "
+                f"{str(fact.get('predicate', '')).strip()} "
+                f"{str(fact.get('object', '')).strip()}"
+            ).strip(),
+            "introduced_by": str(fact.get("subject", "")).strip(),
+            "time": str(fact.get("time_hint", "")).strip(),
+            "evidence": str(fact.get("evidence_type", "")).strip(),
+            "interpretation_affinity": {
+                "I1": 0.2 if strongest != "I1" else 0.6,
+                "I2": 0.2 if strongest != "I2" else 0.6,
+                "I3": 0.2 if strongest != "I3" else 0.6,
+            },
+            "references": list(fact.get("references", [])) if isinstance(fact.get("references", []), list) else [],
+        }
+
+    @staticmethod
+    def _ensure_fact_object(bundle: dict[str, Any], strongest: str) -> None:
+        fact_obj = bundle.get("fact_object")
+        if isinstance(fact_obj, dict) and str(fact_obj.get("id", "")).strip():
+            return
+        facts = bundle.get("novel_facts", [])
+        if isinstance(facts, list) and facts and isinstance(facts[0], dict):
+            bundle["fact_object"] = Prover._fact_object_from_legacy_fact(facts[0], strongest)
+
     def generate(self, challenge: Challenge, ordinal: int) -> Candidate:
         base_strength = {
             "I1": round(0.34 + self.rng.uniform(-0.08, 0.08), 3),
@@ -54,6 +84,9 @@ class Prover:
                 novel_facts = llm_payload.get("novel_facts")
                 if isinstance(novel_facts, list):
                     bundle["novel_facts"] = novel_facts
+                fact_object = llm_payload.get("fact_object")
+                if isinstance(fact_object, dict):
+                    bundle["fact_object"] = fact_object
                 bundle["what_changed_since_previous_step"] = str(
                     llm_payload.get("what_changed_since_previous_step", bundle.get("what_changed_since_previous_step", ""))
                 )
@@ -80,6 +113,9 @@ class Prover:
                 meta["llm_used"] = source.startswith("llm")
                 if llm_error:
                     meta["llm_error"] = llm_error
+        self._ensure_fact_object(bundle, max(strengths, key=strengths.get))
+        if isinstance(bundle.get("fact_object"), dict):
+            meta["fact_object"] = bundle["fact_object"]
 
         return Candidate(
             candidate_id=f"{challenge.challenge_id}-cand-{ordinal}",
@@ -141,6 +177,21 @@ class Prover:
             primary_fact["predicate"] = "commits_publicly"
             primary_fact["object"] = f"a verifiable claim aligned with interpretation {strongest}"
 
+        fact_object = {
+            "id": primary_fact["fact_id"],
+            "type": anchor_type,
+            "content": f"{primary_fact['subject']} {primary_fact['predicate']} {primary_fact['object']}",
+            "introduced_by": primary_fact["subject"],
+            "time": primary_fact["time_hint"],
+            "evidence": primary_fact["evidence_type"],
+            "interpretation_affinity": {
+                "I1": 0.2 if strongest != "I1" else 0.6,
+                "I2": 0.2 if strongest != "I2" else 0.6,
+                "I3": 0.2 if strongest != "I3" else 0.6,
+            },
+            "references": references,
+        }
+
         return {
             "scene": (
                 f"{scene} Witnesses agree on the event itself but differ on where and when the key artifact was discovered. "
@@ -153,6 +204,7 @@ class Prover:
             "social_effect": social_effect,
             "deferred_tension": deferred_tension,
             "novel_facts": [primary_fact],
+            "fact_object": fact_object,
             "what_changed_since_previous_step": f"A new anchor-backed fact was introduced under {challenge.directive_type}.",
             "why_not_rephrase": "The new step adds a uniquely identified anchor and explicit references to prior anchors.",
             "tension_progress": round(min(1.0, 0.45 + self.rng.uniform(0.05, 0.3)), 3),
@@ -198,6 +250,7 @@ class Prover:
             "closure_risk_hint": round(max(strengths.values()) - min(strengths.values()), 3),
             "story_bundle": bundle,
             "novel_facts": facts,
+            "fact_object": bundle.get("fact_object", {}),
             "what_changed_since_previous_step": str(bundle.get("what_changed_since_previous_step", "")),
             "why_not_rephrase": str(bundle.get("why_not_rephrase", "")),
             "tension_progress": float(bundle.get("tension_progress", 0.5)),
@@ -228,6 +281,7 @@ class Prover:
         prompt = (
             "Return JSON with keys: artifact_x (string), bundle (object with keys "
             "scene, surface_confirmation, alternative_compatibility[list], social_effect, deferred_tension), "
+            "fact_object (object with id,type,content,introduced_by,time,evidence,interpretation_affinity,references), "
             "novel_facts (list with exactly one object containing fact_id,anchor_type,subject,predicate,object,time_hint,location_hint,evidence_type,falsifiable,can_be_reinterpreted,references[list]), "
             "what_changed_since_previous_step (string), why_not_rephrase (string), tension_progress (float 0..1). "
             f"Directive: {challenge.directive_type}. Style: {self.style}. "

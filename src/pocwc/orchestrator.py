@@ -384,6 +384,10 @@ class SimulationEngine:
         required_reference_count = max(1, self._progression_int("required_reference_count", 2))
         max_new_facts_per_step = max(1, self._progression_int("max_new_facts_per_step", 1))
         enforce_dependency = difficulty.dependency_depth < dependency_target_depth
+        current_height = int(states[-1]["height"]) + 1 if states else 1
+        hard_similarity_threshold = self._progression_float("hard_similarity_threshold", 0.92)
+        min_refs_height_2 = max(1, self._progression_int("min_refs_height_2", 1))
+        min_refs_height_5 = max(1, self._progression_int("min_refs_height_5", 2))
         cid = f"challenge-{step:04d}-{branch_id}"
 
         challenge = Challenge(
@@ -397,7 +401,13 @@ class SimulationEngine:
                 "theta": self.controller_state.theta,
                 "cascade": "L0-L3",
                 "recent_narratives": recent_narratives,
-                "recent_fact_texts": [str(f.get("fact_text", "")) for f in recent_facts],
+                "recent_fact_texts": [
+                    (
+                        f"{str(f.get('anchor_type', ''))} | {str(f.get('fact_text', ''))} | refs:"
+                        f"{','.join(str(x) for x in (f.get('references', []) if isinstance(f.get('references', []), list) else []))}"
+                    )
+                    for f in recent_facts
+                ],
                 "active_anchor_ids": active_anchor_ids,
                 "recent_directives": recent_directives,
                 "required_families": required_families,
@@ -406,6 +416,10 @@ class SimulationEngine:
                 "dependency_target_depth": dependency_target_depth,
                 "required_reference_count": required_reference_count,
                 "enforce_dependency_accumulation": enforce_dependency,
+                "current_height": current_height,
+                "hard_similarity_threshold": hard_similarity_threshold,
+                "min_refs_height_2": min_refs_height_2,
+                "min_refs_height_5": min_refs_height_5,
                 "stagnation_streak": self.stagnation_streak,
             },
         )
@@ -430,6 +444,7 @@ class SimulationEngine:
         candidate,
         *,
         repetition_penalty: float = 0.0,
+        hard_repetition_fail: bool = False,
     ) -> tuple[Verdict, float, dict[str, Any], dict[str, int], list[str]]:
         results = [v.evaluate(challenge, candidate, allow_l3=True) for v in self.verifiers]
         for result in results:
@@ -448,13 +463,15 @@ class SimulationEngine:
         novelty_scores = [float(r.signals.get("novelty_score", r.score)) for r in results]
         tension_scores = [float(r.signals.get("tension_progress", 0.5)) for r in results]
         novelty_result = next((r for r in results if r.verifier_id == "verifier-novelty"), None)
-        hard_fail = any("Novelty gate failed" in (r.notes or "") for r in results)
+        hard_fail = any("Novelty gate failed" in (r.notes or "") for r in results) or hard_repetition_fail
+        progress_gate = not hard_fail
         decision = self.aggregator.decide(
             results,
             novelty_score=sum(novelty_scores) / max(1, len(novelty_scores)),
             tension_progress=sum(tension_scores) / max(1, len(tension_scores)),
             repetition_penalty=repetition_penalty,
             hard_fail=hard_fail,
+            progress_gate=progress_gate,
         )
 
         novelty_new_fact_count = int(float((novelty_result.signals.get("new_fact_count", 0.0) if novelty_result else 0.0)))
@@ -467,6 +484,7 @@ class SimulationEngine:
             "tension_progress": round(sum(tension_scores) / max(1, len(tension_scores)), 3),
             "new_fact_count": float(novelty_new_fact_count),
             "reference_count": float(novelty_reference_count),
+            "progress_gate": 1.0 if progress_gate else 0.0,
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
 
@@ -535,14 +553,45 @@ class SimulationEngine:
             state_id=state_id,
             state_height=state_height,
             facts=candidate.meta_m.get("novel_facts", []),
+            fact_object=candidate.meta_m.get("fact_object", {}),
         )
 
         self.runtime.accepted_candidates += 1
 
-    def _record_branch_facts(self, *, branch_id: str, state_id: str, state_height: int, facts: Any) -> None:
-        if not isinstance(facts, list):
+    def _record_branch_facts(self, *, branch_id: str, state_id: str, state_height: int, facts: Any, fact_object: Any) -> None:
+        canonical_facts: list[dict[str, Any]] = []
+        if isinstance(fact_object, dict) and str(fact_object.get("id", "")).strip():
+            canonical_facts.append(
+                {
+                    "fact_id": str(fact_object.get("id", "")).strip(),
+                    "anchor_type": str(fact_object.get("type", "public_artifact")).strip() or "public_artifact",
+                    "subject": str(fact_object.get("introduced_by", "")).strip(),
+                    "predicate": "introduces",
+                    "object": str(fact_object.get("content", "")).strip(),
+                    "time_hint": str(fact_object.get("time", "")).strip(),
+                    "location_hint": "",
+                    "evidence_type": str(fact_object.get("evidence", "")).strip(),
+                    "falsifiable": True,
+                    "can_be_reinterpreted": True,
+                    "references": list(fact_object.get("references", [])) if isinstance(fact_object.get("references", []), list) else [],
+                }
+            )
+        if isinstance(facts, list):
+            for item in facts:
+                if isinstance(item, dict):
+                    canonical_facts.append(item)
+        deduped: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for item in canonical_facts:
+            fid = str(item.get("fact_id", "")).strip()
+            if not fid or fid in seen_ids:
+                continue
+            seen_ids.add(fid)
+            deduped.append(item)
+        canonical_facts = deduped
+        if not canonical_facts:
             return
-        for index, item in enumerate(facts):
+        for index, item in enumerate(canonical_facts):
             if not isinstance(item, dict):
                 continue
             fact_text = self._fact_text(item)
@@ -694,18 +743,33 @@ class SimulationEngine:
         states = self.store.list_states(branch_id=branch_id)
         recent_states = states[-window:]
         if len(recent_states) < 2:
-            return {"score": 1.0, "new_fact_count": 0, "entity_growth": 0, "agent_structure_change": 0}
+            return {
+                "score": 1.0,
+                "new_fact_count": 0,
+                "entity_growth": 0,
+                "agent_structure_change": 0,
+                "type_diversity_growth": 0,
+                "interpretation_shift": 0.0,
+            }
         state_ids = {str(s.get("state_id", "")) for s in recent_states}
         facts = [f for f in self.store.list_branch_facts(branch_id, limit=1000) if str(f.get("state_id", "")) in state_ids]
         new_fact_count = len({str(f.get("fact_id", "")) for f in facts if str(f.get("fact_id", "")).strip()})
+        types = {str(f.get("anchor_type", "")).strip() for f in facts if str(f.get("anchor_type", "")).strip()}
+        type_diversity_growth = max(0, len(types) - 1)
         first_entities = set(str(x) for x in recent_states[0].get("meta_m", {}).get("entities", []))
         last_entities = set(str(x) for x in recent_states[-1].get("meta_m", {}).get("entities", []))
         entity_growth = max(0, len(last_entities - first_entities))
         agent_structure_change = 1 if any(str(f.get("anchor_type", "")) == "agent_commitment" for f in facts) else 0
+        first_weights = recent_states[0].get("meta_m", {}).get("interpretation_strength", {})
+        last_weights = recent_states[-1].get("meta_m", {}).get("interpretation_strength", {})
+        keys = set(first_weights).union(last_weights)
+        interpretation_shift = sum(abs(float(last_weights.get(k, 0.0)) - float(first_weights.get(k, 0.0))) for k in keys)
         components = [
             0.0 if new_fact_count > 0 else 1.0,
             0.0 if entity_growth > 0 else 1.0,
             0.0 if agent_structure_change > 0 else 1.0,
+            0.0 if type_diversity_growth > 0 else 1.0,
+            0.0 if interpretation_shift >= 0.08 else 1.0,
         ]
         score = sum(components) / len(components)
         return {
@@ -713,6 +777,8 @@ class SimulationEngine:
             "new_fact_count": int(new_fact_count),
             "entity_growth": int(entity_growth),
             "agent_structure_change": int(agent_structure_change),
+            "type_diversity_growth": int(type_diversity_growth),
+            "interpretation_shift": round(float(interpretation_shift), 3),
         }
 
     def run(self, steps: int | None = None, progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
@@ -759,11 +825,16 @@ class SimulationEngine:
                 max_similarity = 0.0
                 if recent_narratives:
                     max_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
-                novelty_penalty = max(0.0, (max_similarity - 0.62) * 0.35)
+                hard_similarity_threshold = float(challenge.verifier_policy.get("hard_similarity_threshold", 0.92))
+                hard_repetition_fail = max_similarity >= hard_similarity_threshold
+                novelty_penalty = 0.0
+                if max_similarity > 0.80:
+                    novelty_penalty = min(0.85, ((max_similarity - 0.80) / 0.20) ** 2 * 0.85)
                 verdict, score, signals, levels, reasons = self._evaluate_candidate(
                     challenge,
                     candidate,
                     repetition_penalty=novelty_penalty,
+                    hard_repetition_fail=hard_repetition_fail,
                 )
                 adjusted_score = score
                 adjusted_verdict = verdict
@@ -771,6 +842,10 @@ class SimulationEngine:
                 if novelty_penalty > 0:
                     adjusted_reasons.append(
                         f"Repetition penalty applied (similarity={max_similarity:.2f}, penalty={novelty_penalty:.3f})"
+                    )
+                if hard_repetition_fail:
+                    adjusted_reasons.append(
+                        f"Hard repetition reject (similarity={max_similarity:.2f} >= threshold={hard_similarity_threshold:.2f})"
                     )
 
                 candidate_traces.append(
@@ -783,6 +858,7 @@ class SimulationEngine:
                         "penalty": round(novelty_penalty, 3),
                         "new_fact_count": int(signals.get("new_fact_count", 0.0)),
                         "reference_count": int(signals.get("reference_count", 0.0)),
+                        "progress_gate": int(signals.get("progress_gate", 0.0)),
                         "novelty_score": signals.get("novelty_score", 0.0),
                         "tension_progress": signals.get("tension_progress", 0.0),
                         "verdict": adjusted_verdict.value,
