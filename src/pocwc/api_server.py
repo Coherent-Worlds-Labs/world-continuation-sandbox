@@ -125,6 +125,28 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
             self._json(matches)
             return
 
+        if path == "/api/story":
+            qs = parse_qs(parsed.query)
+            branch_id = qs.get("branch_id", [None])[0]
+            limit_raw = qs.get("limit", ["200"])[0]
+            try:
+                limit = int(limit_raw)
+            except ValueError:
+                limit = 200
+            events = self.store.list_story_events(branch_id=branch_id, limit=limit)
+            self._json(events)
+            return
+
+        if path == "/api/story/summary":
+            qs = parse_qs(parsed.query)
+            branch_id = qs.get("branch_id", ["branch-main"])[0]
+            memory = self.store.get_story_memory(branch_id)
+            if not memory:
+                self._json({"error": "story summary not found"}, 404)
+                return
+            self._json(memory)
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
 

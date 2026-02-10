@@ -47,10 +47,25 @@ async function runSearch() {
   renderList("searchResults", rows, (r) => `${r.state_id} | ${r.meta_m.threads?.[0] ?? ""}`);
 }
 
+async function loadStory() {
+  const branch = document.getElementById("storyBranch").value.trim() || "branch-main";
+  const summary = await fetchJson(`/api/story/summary?branch_id=${encodeURIComponent(branch)}`);
+  const events = await fetchJson(`/api/story?branch_id=${encodeURIComponent(branch)}&limit=200`);
+
+  document.getElementById("storySummary").textContent = JSON.stringify(summary, null, 2);
+  renderList(
+    "storyTimeline",
+    events,
+    (e) => `h${e.height} | ${e.title} | ${e.scene} | deferred: ${e.deferred_tension}`
+  );
+}
+
 document.getElementById("loadStates").addEventListener("click", () => loadStates().catch(console.error));
 document.getElementById("loadChallenge").addEventListener("click", () => loadChallenge().catch(console.error));
 document.getElementById("loadCandidate").addEventListener("click", () => loadCandidate().catch(console.error));
 document.getElementById("runSearch").addEventListener("click", () => runSearch().catch(console.error));
+document.getElementById("loadStory").addEventListener("click", () => loadStory().catch(console.error));
 
 loadOverview().catch(console.error);
 loadStates().catch(console.error);
+loadStory().catch(console.error);
