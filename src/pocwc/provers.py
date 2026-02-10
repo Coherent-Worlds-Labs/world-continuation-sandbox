@@ -18,6 +18,7 @@ class Prover:
     story_language: str = "english"
     llm_temperature: float = 0.35
     llm_top_p: float = 1.0
+    world_profile: dict[str, Any] | None = None
 
     def generate(self, challenge: Challenge, ordinal: int) -> Candidate:
         base_strength = {
@@ -91,6 +92,30 @@ class Prover:
             "A council aide releases a timestamped memo from the northern district archive.",
             "A volunteer scanner uncovers a mislabeled evidence card in the central depot.",
         ]
+        profile = self.world_profile or {}
+        scene_templates = list(profile.get("scene_templates", scene_templates)) or scene_templates
+        event_templates = list(profile.get("event_templates", event_templates)) or event_templates
+        alternatives = list(
+            profile.get(
+                "alternative_compatibility",
+                [
+                    "A process-trace explanation preserves uncertainty by attributing confidence to archival workflow noise.",
+                    "A social-belief explanation preserves uncertainty by showing group incentives can mimic evidence.",
+                ],
+            )
+        )
+        social_effect = str(
+            profile.get(
+                "social_effect",
+                "Communities split between evidence-first and interpretation-first responses, increasing coordination friction.",
+            )
+        )
+        deferred_tension = str(
+            profile.get(
+                "deferred_tension",
+                "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?",
+            )
+        )
         scene = f"{self.rng.choice(scene_templates)} {self.rng.choice(event_templates)}"
         return {
             "scene": (
@@ -100,16 +125,9 @@ class Prover:
             "surface_confirmation": (
                 f"The immediate public reaction frames the discrepancy as confirmation of interpretation {strongest}."
             ),
-            "alternative_compatibility": [
-                "A process-trace explanation preserves uncertainty by attributing confidence to archival workflow noise.",
-                "A social-belief explanation preserves uncertainty by showing group incentives can mimic evidence.",
-            ],
-            "social_effect": (
-                "Communities split between evidence-first and interpretation-first responses, increasing coordination friction."
-            ),
-            "deferred_tension": (
-                "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?"
-            ),
+            "alternative_compatibility": alternatives[:4],
+            "social_effect": social_effect,
+            "deferred_tension": deferred_tension,
         }
 
     @staticmethod
@@ -200,9 +218,10 @@ def default_provers(
     story_language: str = "english",
     llm_temperature: float = 0.35,
     llm_top_p: float = 1.0,
+    world_profile: dict[str, Any] | None = None,
 ) -> list[Prover]:
     return [
-        Prover("prover-conservative", "conservative", rng, llm, story_language, llm_temperature, llm_top_p),
-        Prover("prover-aggressive", "aggressive", rng, llm, story_language, llm_temperature, llm_top_p),
-        Prover("prover-maintenance", "maintenance", rng, llm, story_language, llm_temperature, llm_top_p),
+        Prover("prover-conservative", "conservative", rng, llm, story_language, llm_temperature, llm_top_p, world_profile),
+        Prover("prover-aggressive", "aggressive", rng, llm, story_language, llm_temperature, llm_top_p, world_profile),
+        Prover("prover-maintenance", "maintenance", rng, llm, story_language, llm_temperature, llm_top_p, world_profile),
     ]

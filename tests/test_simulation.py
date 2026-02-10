@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -61,6 +62,37 @@ class SimulationTests(unittest.TestCase):
             for trace in traces:
                 self.assertIn("similarity", trace)
                 self.assertIn("penalty", trace)
+
+    def test_custom_world_config_overrides_genesis(self) -> None:
+        db = Path("data/test_world_custom_config.db")
+        cfg = Path("data/test_world_custom_config.json")
+        if db.exists():
+            db.unlink()
+        if cfg.exists():
+            cfg.unlink()
+
+        cfg.write_text(
+            json.dumps(
+                {
+                    "anchor_character": "Morgan",
+                    "main_branch_id": "branch-custom",
+                    "genesis": {
+                        "state_id": "state-custom-0",
+                        "story_bundle": {
+                            "scene": "Morgan starts from a fragmented harbor city timeline."
+                        },
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=1, seed=5, world_config_path=cfg))
+        snap = engine.get_genesis_snapshot()
+        self.assertEqual(snap["branch_id"], "branch-custom")
+        self.assertEqual(snap["genesis_state_id"], "state-custom-0")
+        self.assertIn("Morgan", snap["scene"])
 
 
 if __name__ == "__main__":

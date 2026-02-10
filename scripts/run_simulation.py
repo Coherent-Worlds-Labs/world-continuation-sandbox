@@ -127,6 +127,7 @@ def main() -> None:
     parser.add_argument("--llm-base-url", default=None, help="Override provider base URL")
     parser.add_argument("--llm-temperature", type=float, default=0.75, help="LLM sampling temperature")
     parser.add_argument("--llm-top-p", type=float, default=0.92, help="LLM nucleus sampling top-p")
+    parser.add_argument("--world-config", type=Path, default=Path("config/world.default.json"), help="Path to world configuration JSON")
     parser.add_argument("--story-language", default="english", help="Requested story generation language")
     args = parser.parse_args()
 
@@ -141,6 +142,7 @@ def main() -> None:
             llm_temperature=args.llm_temperature,
             llm_top_p=args.llm_top_p,
             story_language=args.story_language,
+            world_config_path=args.world_config,
         )
     )
     llm = engine.llm_status

@@ -11,8 +11,9 @@ def main() -> None:
     parser.add_argument("--db", type=Path, default=Path("data/world.db"))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--world-config", type=Path, default=Path("config/world.default.json"))
     args = parser.parse_args()
-    run_api_server(args.db, args.host, args.port)
+    run_api_server(args.db, args.host, args.port, args.world_config)
 
 
 if __name__ == "__main__":

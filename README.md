@@ -51,6 +51,13 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --story-language spanish
 ```
 
+Use a specific world configuration:
+
+```bash
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --world-config config/world.default.json
+```
+
 Optional LLM mode (OpenRouter):
 
 ```bash
@@ -132,9 +139,21 @@ The runtime supports provider-agnostic LLM integration with a built-in OpenRoute
 - `OPENROUTER_MODEL`: model identifier (for example `openai/gpt-4o-mini`)
 - `OPENROUTER_BASE_URL`: optional override (default: `https://openrouter.ai/api/v1`)
 - `POCWC_LLM_TIMEOUT`: optional timeout in seconds (default: `30`)
+- `--world-config`: optional CLI file path for world-specific setup (default: `config/world.default.json`)
 
 If key/model/provider are incomplete, the system automatically falls back to deterministic non-LLM generation and verification.
 In deterministic fallback mode, language selection metadata is stored, while high-fidelity multilingual generation is available through the LLM path.
+
+## World Configuration
+
+World-specific setup is centralized in `config/world.default.json`, including:
+
+- genesis state text and initial story bundle,
+- default branch/id naming for the world,
+- continuity defaults (anchor character, known entities, summary template),
+- fallback narrative templates used when LLM is unavailable.
+
+You can supply a custom file via `--world-config` in both `run_simulation.py` and `run_server.py`.
 
 ## License
 

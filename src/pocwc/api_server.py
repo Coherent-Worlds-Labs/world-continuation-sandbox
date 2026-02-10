@@ -150,8 +150,13 @@ class WorldAPIHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
 
-def run_api_server(db_path: Path, host: str = "127.0.0.1", port: int = 8080) -> None:
-    engine = SimulationEngine(SimulationConfig(db_path=db_path))
+def run_api_server(
+    db_path: Path,
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    world_config_path: Path = Path("config/world.default.json"),
+) -> None:
+    engine = SimulationEngine(SimulationConfig(db_path=db_path, world_config_path=world_config_path))
     engine._seed_genesis()
     WorldAPIHandler.store = engine.store
     server = ThreadingHTTPServer((host, port), WorldAPIHandler)
