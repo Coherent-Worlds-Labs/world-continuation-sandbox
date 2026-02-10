@@ -80,43 +80,34 @@ class Prover:
 
     def _fallback_bundle(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any]:
         strongest = max(strengths, key=strengths.get)
-        scene_templates = [
-            "A new discrepancy appears in the shared records.",
-            "An observer notes a contradiction between witness logs and system archives.",
-            "A field report conflicts with the official timeline.",
-            "Two agencies publish diverging source records for the same event.",
-        ]
-        event_templates = [
-            "A courier delivers an annotated map at dawn.",
-            "A maintenance team finds a sealed container at midnight.",
-            "A council aide releases a timestamped memo from a restricted archive.",
-            "A volunteer scanner uncovers a mislabeled evidence card in a public depot.",
-        ]
         profile = self.world_profile or {}
-        scene_templates = list(profile.get("scene_templates", scene_templates)) or scene_templates
-        event_templates = list(profile.get("event_templates", event_templates)) or event_templates
-        alternatives = list(
-            profile.get(
-                "alternative_compatibility",
-                [
-                    "A process-trace explanation preserves uncertainty by attributing confidence to archival workflow noise.",
-                    "A social-belief explanation preserves uncertainty by showing group incentives can mimic evidence.",
-                ],
-            )
-        )
+        scene_templates = list(profile.get("scene_templates", []))
+        event_templates = list(profile.get("event_templates", []))
+        alternatives = list(profile.get("alternative_compatibility", []))
         social_effect = str(
             profile.get(
                 "social_effect",
-                "Communities split between evidence-first and interpretation-first responses, increasing coordination friction.",
+                "",
             )
         )
         deferred_tension = str(
             profile.get(
                 "deferred_tension",
-                "The world gains a new unresolved thread: should trust attach to the discovered artifact or to the discovery process?",
+                "",
             )
         )
-        scene = f"{self.rng.choice(scene_templates)} {self.rng.choice(event_templates)}"
+        if scene_templates and event_templates:
+            scene = f"{self.rng.choice(scene_templates)} {self.rng.choice(event_templates)}"
+        elif scene_templates:
+            scene = self.rng.choice(scene_templates)
+        else:
+            scene = f"A new event is observed under directive {challenge.directive_type}."
+        if not alternatives:
+            alternatives = ["At least one competing interpretation remains plausible."]
+        if not social_effect:
+            social_effect = "Public coordination shifts while interpretation certainty remains unresolved."
+        if not deferred_tension:
+            deferred_tension = "The accepted update preserves unresolved interpretive tension."
         return {
             "scene": (
                 f"{scene} Witnesses agree on the event itself but differ on where and when the key artifact was discovered. "
