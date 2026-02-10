@@ -28,6 +28,7 @@ class SimulationConfig:
     llm_provider: str | None = None
     llm_model: str | None = None
     llm_base_url: str | None = None
+    story_language: str = "english"
 
 
 class SimulationEngine:
@@ -43,7 +44,7 @@ class SimulationEngine:
             base_url_override=config.llm_base_url,
         )
         llm_adapter = create_llm_adapter(llm_settings)
-        self.provers = default_provers(self.rng, llm_adapter)
+        self.provers = default_provers(self.rng, llm_adapter, config.story_language)
         self.verifiers = default_verifiers(self.rng, llm_adapter)
         self.aggregator = Aggregator()
         self.controller = DifficultyController(epoch=config.epoch)
@@ -78,6 +79,16 @@ class SimulationEngine:
                     "entities": ["E0", "Alice", "I1", "I2", "I3"],
                     "threads": ["origin ambiguity", "institutional trust", "memory reliability"],
                     "interpretation_strength": {"I1": 0.34, "I2": 0.33, "I3": 0.33},
+                    "story_bundle": {
+                        "scene": "Alice lives in a city changed by an unnamed event from years ago.",
+                        "surface_confirmation": "No single interpretation can claim certainty.",
+                        "alternative_compatibility": [
+                            "Some describe the event as an accident hidden by institutions.",
+                            "Others describe it as an intentional experiment or a long drift of choices.",
+                        ],
+                        "social_effect": "Public discourse fragments into stable but conflicting narratives.",
+                        "deferred_tension": "Alice remembers life as simpler but cannot prove what changed.",
+                    },
                 },
                 "challenge_ref": None,
                 "acceptance_summary": {"score": 1.0, "reasons": ["genesis"]},
@@ -94,6 +105,42 @@ class SimulationEngine:
                 "uncertainty": 0.5,
                 "closure_pressure": 0.5,
                 "chaos_pressure": 0.5,
+            }
+        )
+        self.store.upsert_story_memory(
+            {
+                "branch_id": branch_id,
+                "summary": "Alice's world begins with one unresolved event and three competing interpretations.",
+                "continuity": {
+                    "anchor_character": "Alice",
+                    "known_entities": ["E0", "Alice", "city archive"],
+                    "unresolved_tensions": [
+                        "What happened at E0",
+                        "Whether records reflect truth or process noise",
+                    ],
+                    "timeline_highlights": [
+                        "Genesis uncertainty is stable and no final truth is available.",
+                    ],
+                },
+                "updated_at": created_at,
+            }
+        )
+        self.store.insert_story_event(
+            {
+                "branch_id": branch_id,
+                "state_id": state_id,
+                "height": 0,
+                "title": "Genesis: The City After E0",
+                "scene": "Alice and the city hold incompatible memories of a foundational event.",
+                "surface_confirmation": "No interpretation is final.",
+                "alternative_compatibility": [
+                    "Accident narrative",
+                    "Experiment narrative",
+                    "Cumulative drift narrative",
+                ],
+                "social_effect": "Interpretive camps emerge without resolving the underlying event.",
+                "deferred_tension": "Alice cannot map memory certainty to objective evidence.",
+                "created_at": created_at,
             }
         )
 
@@ -136,6 +183,12 @@ class SimulationEngine:
         directive = self.taskgen.pick_directive(signals, self.controller_state.mode)
         difficulty = self.taskgen.build_difficulty(self.controller_state.difficulty, signals)
         projection = self.projection.build(artifacts, difficulty.dependency_depth)
+        story_memory = self.store.get_story_memory(branch["branch_id"])
+        if story_memory:
+            projection = (
+                f"{projection}\n\nStory continuity summary:\n{story_memory.get('summary', '')}\n"
+                f"Unresolved tensions: {', '.join(story_memory.get('continuity', {}).get('unresolved_tensions', []))}"
+            )
         cid = f"challenge-{step:04d}-{branch['branch_id']}"
 
         challenge = Challenge(
@@ -240,8 +293,68 @@ class SimulationEngine:
                 "chaos_pressure": chaos_pressure,
             }
         )
+        self._update_story_continuity(
+            branch_id=branch_id,
+            state_id=state_id,
+            height=state_height,
+            story_bundle=candidate.meta_m.get("story_bundle", {}),
+        )
 
         self.runtime.accepted_candidates += 1
+
+    def _update_story_continuity(self, *, branch_id: str, state_id: str, height: int, story_bundle: dict[str, Any]) -> None:
+        memory = self.store.get_story_memory(branch_id)
+        continuity = memory.get("continuity", {}) if memory else {}
+        known_entities = set(continuity.get("known_entities", ["Alice", "E0", "city archive"]))
+        unresolved = list(continuity.get("unresolved_tensions", []))
+        highlights = list(continuity.get("timeline_highlights", []))
+
+        scene = str(story_bundle.get("scene", ""))
+        social_effect = str(story_bundle.get("social_effect", ""))
+        tension = str(story_bundle.get("deferred_tension", ""))
+        if "Alice" in scene:
+            known_entities.add("Alice")
+        if "archive" in scene.lower():
+            known_entities.add("city archive")
+        if tension:
+            unresolved.append(tension)
+        if scene:
+            highlights.append(f"H{height}: {scene}")
+
+        unresolved = unresolved[-12:]
+        highlights = highlights[-20:]
+        summary = (
+            f"Alice continuity at height {height}: "
+            f"{scene[:120] if scene else 'state accepted with unresolved interpretations'}"
+        )
+
+        self.store.upsert_story_memory(
+            {
+                "branch_id": branch_id,
+                "summary": summary,
+                "continuity": {
+                    "anchor_character": "Alice",
+                    "known_entities": sorted(known_entities),
+                    "unresolved_tensions": unresolved,
+                    "timeline_highlights": highlights,
+                },
+                "updated_at": self._now(),
+            }
+        )
+        self.store.insert_story_event(
+            {
+                "branch_id": branch_id,
+                "state_id": state_id,
+                "height": height,
+                "title": f"Story step {height}",
+                "scene": scene or "No explicit scene provided.",
+                "surface_confirmation": str(story_bundle.get("surface_confirmation", "")),
+                "alternative_compatibility": story_bundle.get("alternative_compatibility", []),
+                "social_effect": social_effect,
+                "deferred_tension": tension,
+                "created_at": self._now(),
+            }
+        )
 
     def _maybe_create_fork(self, challenge: Challenge, accepted_candidate) -> None:
         if self.runtime.forks_created >= 2:
