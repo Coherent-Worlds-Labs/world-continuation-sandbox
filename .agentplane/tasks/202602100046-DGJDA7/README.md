@@ -1,7 +1,8 @@
 ---
 id: "202602100046-DGJDA7"
 title: "Implement simulation output hotfix and adaptive retry"
-status: "DOING"
+result_summary: "Hotfix delivered and verified"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T00:48:56.793Z"
   updated_by: "TESTER"
   note: "Unit tests passed with PYTHONPATH=src; simulation smoke run confirms LLM status reason visibility, decision diagnostics, adaptive retry fields, and no formatter-level text truncation in console stream."
-commit: null
+commit:
+  hash: "62b486209a64b5b237ab746220ae35a997a9f789"
+  message: "✅ DGJDA7 backend: improve runtime diagnostics and full narrative stream"
 comments:
   -
     author: "CODER"
     body: "Start: executing approved hotfix for stream diagnostics, adaptive retry acceptance, and full untruncated narrative output."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: implemented adaptive reject-streak retry acceptance, explicit LLM status/reason reporting, decision diagnostics, and full untruncated narrative/tension/candidate console stream; unit tests and smoke run passed with PYTHONPATH=src."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Unit tests passed with PYTHONPATH=src; simulation smoke run confirms LLM status reason visibility, decision diagnostics, adaptive retry fields, and no formatter-level text truncation in console stream."
+  -
+    type: "status"
+    at: "2026-02-10T00:51:24.849Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: implemented adaptive reject-streak retry acceptance, explicit LLM status/reason reporting, decision diagnostics, and full untruncated narrative/tension/candidate console stream; unit tests and smoke run passed with PYTHONPATH=src."
 doc_version: 2
-doc_updated_at: "2026-02-10T00:49:19.309Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T00:51:24.849Z"
+doc_updated_by: "INTEGRATOR"
 description: "Apply user-requested fixes: remove output truncation, surface LLM enablement reason, print candidate/decision diagnostics, and add adaptive acceptance after reject streak (excluding deterministic language fallback localization)."
 id_source: "generated"
 ---
