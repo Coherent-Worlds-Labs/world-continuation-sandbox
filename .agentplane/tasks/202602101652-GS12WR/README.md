@@ -1,7 +1,8 @@
 ---
 id: "202602101652-GS12WR"
 title: "Remove last prover fallback templates from source"
-status: "DOING"
+result_summary: "Prover source hardcodes removed"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T16:54:40.691Z"
   updated_by: "TESTER"
   note: "Unit tests pass (12), and grep check confirms removed inline fallback template literals from src/pocwc/provers.py."
-commit: null
+commit:
+  hash: "2bba16d6cdaabf141d4c07f039f29c7a2938ed08"
+  message: "✅ GS12WR backend: remove last prover fallback hardcodes"
 comments:
   -
     author: "CODER"
     body: "Start: finalizing removal of residual fallback templates from prover source."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: prover fallback templates are now config-driven and no residual literal template strings remain in source."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Unit tests pass (12), and grep check confirms removed inline fallback template literals from src/pocwc/provers.py."
+  -
+    type: "status"
+    at: "2026-02-10T16:55:18.279Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: prover fallback templates are now config-driven and no residual literal template strings remain in source."
 doc_version: 2
-doc_updated_at: "2026-02-10T16:54:40.695Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T16:55:18.279Z"
+doc_updated_by: "INTEGRATOR"
 description: "Eliminate residual narrative template literals in prover fallback and rely on world-config content only."
 id_source: "generated"
 ---
