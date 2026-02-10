@@ -87,6 +87,27 @@ class WorldStore:
                     metrics TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS story_memory (
+                    branch_id TEXT PRIMARY KEY,
+                    summary TEXT NOT NULL,
+                    continuity TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS story_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id TEXT NOT NULL,
+                    state_id TEXT NOT NULL,
+                    height INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    scene TEXT NOT NULL,
+                    surface_confirmation TEXT NOT NULL,
+                    alternative_compatibility TEXT NOT NULL,
+                    social_effect TEXT NOT NULL,
+                    deferred_tension TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -173,6 +194,55 @@ class WorldStore:
                 """,
                 payload,
             )
+
+    def upsert_story_memory(self, row: dict[str, Any]) -> None:
+        payload = dict(row)
+        payload["continuity"] = json.dumps(payload["continuity"], ensure_ascii=False)
+        with closing(self._conn()) as conn:
+            conn.execute(
+                """
+                INSERT INTO story_memory(branch_id, summary, continuity, updated_at)
+                VALUES(:branch_id, :summary, :continuity, :updated_at)
+                ON CONFLICT(branch_id) DO UPDATE SET
+                  summary=excluded.summary,
+                  continuity=excluded.continuity,
+                  updated_at=excluded.updated_at
+                """,
+                payload,
+            )
+
+    def get_story_memory(self, branch_id: str) -> dict[str, Any] | None:
+        with closing(self._conn()) as conn:
+            row = conn.execute("SELECT * FROM story_memory WHERE branch_id=?", (branch_id,)).fetchone()
+        return self._decode_row(row, ("continuity",)) if row else None
+
+    def insert_story_event(self, row: dict[str, Any]) -> None:
+        payload = dict(row)
+        alt = payload.get("alternative_compatibility", [])
+        payload["alternative_compatibility"] = json.dumps(alt, ensure_ascii=False)
+        with closing(self._conn()) as conn:
+            conn.execute(
+                """
+                INSERT INTO story_events(branch_id, state_id, height, title, scene, surface_confirmation, alternative_compatibility, social_effect, deferred_tension, created_at)
+                VALUES(:branch_id, :state_id, :height, :title, :scene, :surface_confirmation, :alternative_compatibility, :social_effect, :deferred_tension, :created_at)
+                """,
+                payload,
+            )
+
+    def list_story_events(self, branch_id: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        cap = max(1, min(limit, 1000))
+        with closing(self._conn()) as conn:
+            if branch_id:
+                rows = conn.execute(
+                    "SELECT * FROM story_events WHERE branch_id=? ORDER BY height ASC, id ASC LIMIT ?",
+                    (branch_id, cap),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM story_events ORDER BY branch_id ASC, height ASC, id ASC LIMIT ?",
+                    (cap,),
+                ).fetchall()
+        return [self._decode_row(r, ("alternative_compatibility",)) for r in rows]
 
     def _decode_row(self, row: sqlite3.Row, json_fields: tuple[str, ...]) -> dict[str, Any]:
         data = dict(row)
