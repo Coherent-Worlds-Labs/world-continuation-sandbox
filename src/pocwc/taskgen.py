@@ -8,6 +8,7 @@ from .domain import Difficulty
 
 DIRECTIVE_CATALOG: dict[str, dict[str, Any]] = {
     "IntroduceAmbiguousFact": {"family": "introduce_fact"},
+    "InstitutionalAction": {"family": "institutional_action"},
     "AgentCommitment": {"family": "agent_commitment"},
     "ResourceConstraint": {"family": "resource_constraint"},
     "InformationAsymmetry": {"family": "information_asymmetry"},
@@ -45,6 +46,7 @@ class TaskGenerator:
         if mode == "diversify":
             return [
                 "IntroduceAmbiguousFact",
+                "InstitutionalAction",
                 "AgentCommitment",
                 "ResourceConstraint",
                 "InformationAsymmetry",

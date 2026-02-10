@@ -160,7 +160,19 @@ class SimulationTests(unittest.TestCase):
         self.assertIsNotNone(branch)
         challenge = engine._build_challenge(1, branch, reject_streak=3)
         self.assertTrue(bool(challenge.verifier_policy.get("escape_mode")))
-        self.assertIn(challenge.directive_type, {"IntroduceAmbiguousFact", "AgentCommitment", "ResourceConstraint"})
+        self.assertIn(challenge.directive_type, {"IntroduceAmbiguousFact", "InstitutionalAction", "AgentCommitment", "ResourceConstraint"})
+
+    def test_scene_stagnation_forces_institutional_action(self) -> None:
+        db = Path("data/test_world_scene_stagnation_directive.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=1, seed=15))
+        engine._seed_genesis()
+        branch = engine.store.get_branch("branch-main")
+        self.assertIsNotNone(branch)
+        engine.scene_stagnation_by_branch["branch-main"] = 3
+        challenge = engine._build_challenge(1, branch, reject_streak=0)
+        self.assertEqual(challenge.directive_type, "InstitutionalAction")
 
 
 if __name__ == "__main__":

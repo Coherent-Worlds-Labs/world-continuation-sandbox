@@ -108,6 +108,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - Verification is probabilistic and heuristic.
 - FIX3 progression guardrails are deterministic at gate level: hard fact-repeat reject, reference accumulation policy, and reject-streak escape mode.
 - Reject-streak handling no longer lowers acceptance thresholds; progression must pass hard gates.
+- FIX5 adds semantic hardening: strict fact-type enum validation, fact-specificity gate, and scene-stagnation breaker (`InstitutionalAction`).
 - L3 is simulated, not a real expensive external reasoning model.
 - No distributed consensus networking or cryptoeconomic security.
 - LLM provider calls require explicit API credentials and network availability; missing credentials trigger deterministic fallback.

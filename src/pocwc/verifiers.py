@@ -3,7 +3,7 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from .domain import Candidate, Challenge, VerificationLevel, VerificationResult, Verdict
 from .invariants import evaluate_invariants
@@ -107,6 +107,14 @@ class NoveltyGateVerifier:
     llm: LLMAdapter | None = None
     min_novelty_score: float = 0.30
     hard_similarity_threshold: float = 0.92
+    allowed_fact_types: ClassVar[tuple[str, ...]] = (
+        "public_artifact",
+        "witness",
+        "measurement",
+        "institutional_action",
+        "resource_change",
+        "agent_commitment",
+    )
 
     @staticmethod
     def _canonical_fact_text_from_object(fact: dict[str, Any]) -> str:
@@ -127,8 +135,11 @@ class NoveltyGateVerifier:
             return False, f"missing fields: {', '.join(missing)}"
         if not str(fact.get("id", "")).strip():
             return False, "id is empty"
-        if not str(fact.get("type", "")).strip():
+        fact_type = str(fact.get("type", "")).strip()
+        if not fact_type:
             return False, "type is empty"
+        if fact_type not in NoveltyGateVerifier.allowed_fact_types:
+            return False, "type is outside allowed enum"
         if not str(fact.get("introduced_by", "")).strip():
             return False, "introduced_by is empty"
         content = str(fact.get("content", "")).strip()
@@ -168,6 +179,24 @@ class NoveltyGateVerifier:
         max_sim = max((semantic_similarity(probe, prev, self.llm) for prev in recent_facts), default=0.0)
         return max_sim >= 0.93
 
+    @staticmethod
+    def _fact_specificity_score(content: str, evidence_items: list[str], places: list[str], artifact_terms: list[str], banned_terms: list[str]) -> int:
+        text = content.lower()
+        score = 0
+        if any(ch.isdigit() for ch in content):
+            score += 1
+        if any(place.lower() in text for place in places):
+            score += 1
+        if any(term.lower() in text for term in artifact_terms):
+            score += 1
+        if len(evidence_items) >= 2:
+            score += 1
+        if 80 <= len(content) <= 280:
+            score += 1
+        if any(term.lower() in text for term in banned_terms):
+            score -= 1
+        return score
+
     def evaluate(self, challenge: Challenge, candidate: Candidate, allow_l3: bool = False) -> VerificationResult:
         _ = allow_l3
         policy = challenge.verifier_policy
@@ -198,9 +227,20 @@ class NoveltyGateVerifier:
         hard_fact_similarity_threshold = max(0.0, min(1.0, float(policy.get("sim_fact_max", self.hard_similarity_threshold))))
         scene_repeat_threshold = max(0.0, min(1.0, float(policy.get("scene_repeat_threshold", 0.97))))
         refs_target = max(1, int(policy.get("refs_target", 2)))
+        mode = str(policy.get("mode", "diversify"))
+        max_same_fact_type_diversify = max(1, int(policy.get("max_same_fact_type_diversify", 2)))
         early_phase_end = max(1, int(policy.get("novelty_phase_early_end", 5)))
         mid_phase_end = max(early_phase_end + 1, int(policy.get("novelty_phase_mid_end", 20)))
         current_height = max(1, int(policy.get("current_height", 1)))
+        specificity_min = max(0, int(policy.get("min_fact_specificity_score", 3)))
+        specificity_types = {
+            str(x).strip()
+            for x in policy.get("fact_specificity_required_types", ["public_artifact", "measurement", "institutional_action"])
+            if str(x).strip()
+        }
+        places = [str(x).strip() for x in policy.get("specificity_places", []) if str(x).strip()]
+        artifact_terms = [str(x).strip() for x in policy.get("specificity_artifacts", []) if str(x).strip()]
+        banned_terms = [str(x).strip() for x in policy.get("specificity_banned_terms", []) if str(x).strip()]
 
         fact_object = candidate.meta_m.get("fact_object", {})
         fact_ok, fact_reason = self._fact_object_valid(fact_object) if isinstance(fact_object, dict) else (False, "fact_object missing")
@@ -216,6 +256,13 @@ class NoveltyGateVerifier:
         references = []
         if isinstance(fact_object, dict) and isinstance(fact_object.get("references"), list):
             references = [str(x).strip() for x in fact_object.get("references", []) if str(x).strip()]
+        evidence = fact_object.get("evidence", []) if isinstance(fact_object, dict) else []
+        if isinstance(evidence, list):
+            evidence_items = [str(x).strip() for x in evidence if str(x).strip()]
+        else:
+            evidence_items = [str(evidence).strip()] if str(evidence).strip() else []
+        fact_content = str((fact_object or {}).get("content", "")).strip() if isinstance(fact_object, dict) else ""
+        fact_specificity_score = self._fact_specificity_score(fact_content, evidence_items, places, artifact_terms, banned_terms)
         valid_references = [r for r in dict.fromkeys(references) if r in active_anchor_ids]
         refs_count = len(valid_references)
         refs_quality = 0.0
@@ -252,6 +299,19 @@ class NoveltyGateVerifier:
         if not fact_ok:
             hard_fail = True
             reasons.append(f"Novelty gate failed: invalid fact_object ({fact_reason})")
+        if fact_type in specificity_types and fact_specificity_score < specificity_min:
+            hard_fail = True
+            reasons.append("Novelty gate failed: fact specificity is below minimum")
+        if mode == "diversify":
+            same_tail = 0
+            for item in reversed(last_types):
+                if item == fact_type:
+                    same_tail += 1
+                else:
+                    break
+            if same_tail >= max_same_fact_type_diversify:
+                hard_fail = True
+                reasons.append("Novelty gate failed: repeated fact type exceeds diversify streak limit")
         if unique_new > max_new_facts_per_step:
             hard_fail = True
             reasons.append("Novelty gate failed: too many new facts for one step")
@@ -322,6 +382,7 @@ class NoveltyGateVerifier:
                 "novel_type": round(novel_type, 3),
                 "novel_refs": round(novel_refs, 3),
                 "novelty_min_threshold": round(max(self.min_novelty_score, novelty_min), 3),
+                "fact_specificity_score": float(fact_specificity_score),
                 "progress_gate": progress_gate,
                 "tension_progress": round(tension_progress, 3),
             },

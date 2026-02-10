@@ -25,6 +25,13 @@ class Fix2ConstraintTests(unittest.TestCase):
             "hard_similarity_threshold": 0.92,
             "min_refs_height_2": 1,
             "min_refs_height_5": 2,
+            "mode": "diversify",
+            "min_fact_specificity_score": 3,
+            "fact_specificity_required_types": ["public_artifact", "measurement", "institutional_action"],
+            "specificity_places": ["archive", "district", "checkpoint", "wing", "desk"],
+            "specificity_artifacts": ["document", "map", "record", "registry", "memo", "card"],
+            "specificity_banned_terms": ["something", "some", "perhaps", "unknown"],
+            "max_same_fact_type_diversify": 2,
         }
         policy.update(policy_overrides)
         return Challenge(
@@ -107,6 +114,27 @@ class Fix2ConstraintTests(unittest.TestCase):
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
         self.assertIn("equivalent", result.notes)
+
+    def test_fact_type_outside_enum_is_rejected(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(4), llm=None)
+        challenge = self._challenge()
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["type"] = "факт"
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("outside allowed enum", result.notes)
+
+    def test_fact_specificity_gate_rejects_vague_content(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(5), llm=None)
+        challenge = self._challenge()
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["content"] = "Someone maybe found something unknown somewhere."
+        fact_object["evidence"] = ["maybe log"]
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("specificity", result.notes)
 
     def test_aggregator_hard_progress_gate(self):
         agg = Aggregator()

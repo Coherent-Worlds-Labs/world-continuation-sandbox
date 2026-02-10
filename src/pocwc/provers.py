@@ -20,11 +20,45 @@ class Prover:
     llm_top_p: float = 1.0
     world_profile: dict[str, Any] | None = None
 
+    _ALLOWED_FACT_TYPES = {
+        "public_artifact",
+        "witness",
+        "measurement",
+        "institutional_action",
+        "resource_change",
+        "agent_commitment",
+    }
+
+    @classmethod
+    def _normalize_fact_type(cls, raw: Any) -> str:
+        text = str(raw or "").strip().lower()
+        mapping = {
+            "fact": "public_artifact",
+            "new_fact": "public_artifact",
+            "artifact": "public_artifact",
+            "publicartifact": "public_artifact",
+            "артефакт": "public_artifact",
+            "факт": "public_artifact",
+            "новый факт": "public_artifact",
+            "измерение": "measurement",
+            "measurement": "measurement",
+            "institutional_action": "institutional_action",
+            "institution action": "institutional_action",
+            "действие института": "institutional_action",
+            "институциональное действие": "institutional_action",
+            "resource_change": "resource_change",
+            "agent_commitment": "agent_commitment",
+            "witness": "witness",
+        }
+        normalized = mapping.get(text, text.replace(" ", "_"))
+        return normalized if normalized in cls._ALLOWED_FACT_TYPES else "public_artifact"
+
     @staticmethod
     def _fact_object_from_legacy_fact(fact: dict[str, Any], strongest: str) -> dict[str, Any]:
+        anchor_type = Prover._normalize_fact_type(fact.get("anchor_type", "public_artifact"))
         return {
             "id": str(fact.get("fact_id", "")).strip(),
-            "type": str(fact.get("anchor_type", "public_artifact")).strip() or "public_artifact",
+            "type": anchor_type,
             "content": (
                 f"{str(fact.get('subject', '')).strip()} "
                 f"{str(fact.get('predicate', '')).strip()} "
@@ -45,6 +79,7 @@ class Prover:
     def _ensure_fact_object(bundle: dict[str, Any], strongest: str) -> None:
         fact_obj = bundle.get("fact_object")
         if isinstance(fact_obj, dict) and str(fact_obj.get("id", "")).strip():
+            fact_obj["type"] = Prover._normalize_fact_type(fact_obj.get("type", "public_artifact"))
             return
         facts = bundle.get("novel_facts", [])
         if isinstance(facts, list) and facts and isinstance(facts[0], dict):
@@ -86,6 +121,7 @@ class Prover:
                     bundle["novel_facts"] = novel_facts
                 fact_object = llm_payload.get("fact_object")
                 if isinstance(fact_object, dict):
+                    fact_object["type"] = self._normalize_fact_type(fact_object.get("type", "public_artifact"))
                     bundle["fact_object"] = fact_object
                 bundle["what_changed_since_previous_step"] = str(
                     llm_payload.get("what_changed_since_previous_step", bundle.get("what_changed_since_previous_step", ""))
@@ -163,15 +199,20 @@ class Prover:
             references = [active_anchor_ids[-1]]
 
         anchor_type = "public_artifact"
+        if challenge.directive_type == "InstitutionalAction":
+            anchor_type = "institutional_action"
         if challenge.directive_type == "AgentCommitment":
             anchor_type = "agent_commitment"
+        if challenge.directive_type == "ResourceConstraint":
+            anchor_type = "resource_change"
 
+        operation_code = f"R-{self.rng.randint(100, 999)}"
         primary_fact = {
             "fact_id": f"{challenge.challenge_id}-f1-{self.prover_id[-4:]}",
             "anchor_type": anchor_type,
             "subject": self.rng.choice(fact_subject_pool),
             "predicate": self.rng.choice(fact_predicates),
-            "object": self.rng.choice(fact_objects),
+            "object": f"{self.rng.choice(fact_objects)} under operation {operation_code}",
             "time_hint": self.rng.choice(fact_time_pool),
             "location_hint": self.rng.choice(fact_location_pool),
             "evidence_type": "report",
@@ -182,14 +223,24 @@ class Prover:
         if anchor_type == "agent_commitment":
             primary_fact["predicate"] = "commits_publicly"
             primary_fact["object"] = f"a verifiable claim aligned with interpretation {strongest}"
+        elif anchor_type == "institutional_action":
+            primary_fact["predicate"] = "issues_formal_order"
+            primary_fact["object"] = f"order {operation_code} affecting archive access protocol"
 
         fact_object = {
             "id": primary_fact["fact_id"],
             "type": anchor_type,
-            "content": f"{primary_fact['subject']} {primary_fact['predicate']} {primary_fact['object']}",
+            "content": (
+                f"{primary_fact['subject']} {primary_fact['predicate']} {primary_fact['object']} "
+                f"at {primary_fact['location_hint']} during {primary_fact['time_hint']}. "
+                f"Registry entry #{operation_code} records the observed procedural shift."
+            ),
             "introduced_by": primary_fact["subject"],
             "time": primary_fact["time_hint"],
-            "evidence": [f"{primary_fact['evidence_type']} observed at {primary_fact['location_hint']}"],
+            "evidence": [
+                f"Observation: entry {operation_code} appears in the public registry at {primary_fact['location_hint']}.",
+                f"Observation: two witness logs timestamped {primary_fact['time_hint']} reference the same entry id.",
+            ],
             "interpretation_affinity": {
                 "I1": 0.2 if strongest != "I1" else 0.6,
                 "I2": 0.2 if strongest != "I2" else 0.6,
@@ -298,7 +349,11 @@ class Prover:
             "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure. "
             "Use one clearly named new fact only. Include references to prior anchor IDs when available. "
             f"Available prior fact IDs: {challenge.verifier_policy.get('last_fact_ids', [])}\n"
-            "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement."
+            "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement. "
+            "For InstitutionalAction directive, set anchor_type=institutional_action and describe one concrete formal action."
+            " fact_object.type MUST be one of: public_artifact, witness, measurement, institutional_action, resource_change, agent_commitment. "
+            "fact_object.content must include one location, one numeric/date token, and one concrete artifact/object. "
+            "fact_object.evidence must contain exactly 2 observable statements."
         )
         if escape_mode:
             prompt += (

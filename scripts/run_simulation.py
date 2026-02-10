@@ -77,6 +77,7 @@ def _render_progress(update: dict) -> None:
     reject_streak = int(update.get("reject_streak") or 0)
     escape_mode = bool(update.get("escape_mode"))
     projection_fact_ids = update.get("projection_fact_ids") or []
+    scene_stagnation_streak = int(update.get("scene_stagnation_streak") or 0)
     candidate_traces = update.get("candidate_traces") or []
     tension = str(update.get("deferred_tension") or "")
 
@@ -99,6 +100,7 @@ def _render_progress(update: dict) -> None:
     print(
         f"{_style('novelty:', f'new_fact_count={new_fact_count}  novel_fact_ratio={novel_fact_ratio:.3f}  semantic_delta={semantic_delta_score:.3f}', color='92')} "
         f"{_style('stagnation:', str(stagnation_streak), color='91')} "
+        f"{_style('scene_streak:', str(scene_stagnation_streak), color='91')} "
         f"{_style('ontological:', f'{ontological_stagnation:.3f}', color='95')} "
         f"{_style('anchors:', str(active_anchor_count), color='96')}"
     )
@@ -123,6 +125,7 @@ def _render_progress(update: dict) -> None:
                         f"sim={trace.get('similarity')} scene_sim={trace.get('scene_similarity')} penalty={trace.get('penalty')} "
                         f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} refs_q={trace.get('refs_quality')} progress_gate={trace.get('progress_gate')} "
                         f"novelty={trace.get('novelty_score')} (fact={trace.get('novel_fact')},type={trace.get('novel_type')},refs={trace.get('novel_refs')}) "
+                        f"fss={trace.get('fact_specificity_score')} "
                         f"tension_prog={trace.get('tension_progress')} escape={trace.get('escape_mode')} "
                         f"fact_id={trace.get('fact_id')} fact_type={trace.get('fact_type')} refs={trace.get('fact_refs')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"

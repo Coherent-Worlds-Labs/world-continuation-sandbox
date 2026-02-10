@@ -91,7 +91,10 @@ Novelty contract:
 - Candidate generation must provide a canonical `fact_object` (`id`, `type`, `content`, `introduced_by`, `time`, `evidence`, `interpretation_affinity`, `references`).
 - A dedicated novelty gate verifier is fact-first: novelty and hard-repeat checks are computed from canonical fact content, while scene similarity is only a secondary guard.
 - The novelty gate rejects candidates with weak fact novelty, invalid fact objects, or broken reference accumulation (`refs_count`/`refs_quality`) against branch anchors.
+- Fact types are now strict-enum (`public_artifact`, `witness`, `measurement`, `institutional_action`, `resource_change`, `agent_commitment`); unknown/generic types are rejected.
+- Concrete fact specificity is enforced (`fact_specificity_score`): concrete content plus observable evidence are required for artifact/measurement/institutional facts.
 - `AgentCommitment` directives require at least one persistent commitment anchor.
+- Scene stagnation is monitored; repeated near-identical scenes trigger an `InstitutionalAction` breaker directive instead of lowering acceptance thresholds.
 - Final acceptance now requires both score threshold and `progress_gate=true`; high stylistic score without structural progress is rejected.
 
 ### 2. Run API + UI

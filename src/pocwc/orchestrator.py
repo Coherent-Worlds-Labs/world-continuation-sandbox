@@ -89,6 +89,7 @@ class SimulationEngine:
         self.stagnation_streak = 0
         self.steps_since_new_fact = 0
         self.ontological_stagnation_score = 0.0
+        self.scene_stagnation_by_branch: dict[str, int] = {}
 
     @staticmethod
     def _now() -> str:
@@ -391,9 +392,14 @@ class SimulationEngine:
             )
         )
         escape_mode = reject_streak >= escape_reject_streak
+        scene_stagnation_streak = int(self.scene_stagnation_by_branch.get(branch_id, 0))
+        scene_stagnation_trigger = max(2, self._progression_int("scene_stagnation_trigger", 3))
         if escape_mode and forced_directives:
             directive = self.rng.choice([str(x) for x in forced_directives if str(x).strip()] or [directive])
-        if self.stagnation_streak >= 2:
+        force_institutional_action = scene_stagnation_streak >= scene_stagnation_trigger
+        if force_institutional_action:
+            directive = "InstitutionalAction"
+        if self.stagnation_streak >= 2 and not force_institutional_action:
             directive = self.rng.choice(["AgentCommitment", "ResourceConstraint", "InformationAsymmetry", "DelayedConsequence"])
         max_streak = max(1, int(getattr(self.taskgen, "max_same_directive_streak", 2)))
         if len(recent_directives) >= max_streak:
@@ -462,6 +468,38 @@ class SimulationEngine:
         type_memory_window = self._progression_int("type_memory_window", 7)
         refs_target = self._progression_int("refs_target", 2)
         hard_refs_from_step_2 = bool(self.progression.get("hard_refs_from_step_2", True))
+        max_same_fact_type_diversify = self._progression_int("max_same_fact_type_diversify", 2)
+        min_fact_specificity_score = self._progression_int("min_fact_specificity_score", 3)
+        fact_type_enum = list(
+            self.progression.get(
+                "fact_type_enum",
+                ["public_artifact", "witness", "measurement", "institutional_action", "resource_change", "agent_commitment"],
+            )
+        )
+        fact_specificity_required_types = list(
+            self.progression.get(
+                "fact_specificity_required_types",
+                ["public_artifact", "measurement", "institutional_action"],
+            )
+        )
+        specificity_places = list(
+            self.progression.get(
+                "specificity_places",
+                ["archive", "station", "museum", "depot", "district", "checkpoint", "wing", "desk"],
+            )
+        )
+        specificity_artifacts = list(
+            self.progression.get(
+                "specificity_artifacts",
+                ["document", "map", "photo", "record", "protocol", "fragment", "meter", "registry", "memo", "card"],
+            )
+        )
+        specificity_banned_terms = list(
+            self.progression.get(
+                "specificity_banned_terms",
+                ["something", "some", "perhaps", "unknown", "что-то", "некоторые", "возможно", "неизвестно"],
+            )
+        )
         novelty_phase_early_end = self._progression_int("novelty_phase_early_end", 5)
         novelty_phase_mid_end = self._progression_int("novelty_phase_mid_end", 20)
         sim_fact_max = self._progression_float("sim_fact_max", hard_similarity_threshold)
@@ -477,6 +515,7 @@ class SimulationEngine:
             verifier_policy={
                 "theta": self.controller_state.theta,
                 "cascade": "L0-L3",
+                "mode": self.controller_state.mode,
                 "recent_narratives": recent_narratives,
                 "recent_fact_texts": [f"{str(f.get('anchor_type', ''))}: {str(f.get('fact_text', ''))}" for f in recent_facts],
                 "recent_fact_types": [str(f.get("anchor_type", "")).strip() for f in recent_facts if str(f.get("anchor_type", "")).strip()],
@@ -508,10 +547,18 @@ class SimulationEngine:
                 "type_memory_window": type_memory_window,
                 "refs_target": refs_target,
                 "hard_refs_from_step_2": hard_refs_from_step_2,
+                "max_same_fact_type_diversify": max_same_fact_type_diversify,
+                "min_fact_specificity_score": min_fact_specificity_score,
+                "fact_type_enum": fact_type_enum,
+                "fact_specificity_required_types": fact_specificity_required_types,
+                "specificity_places": specificity_places,
+                "specificity_artifacts": specificity_artifacts,
+                "specificity_banned_terms": specificity_banned_terms,
                 "novelty_phase_early_end": novelty_phase_early_end,
                 "novelty_phase_mid_end": novelty_phase_mid_end,
                 "sim_fact_max": sim_fact_max,
                 "stagnation_streak": self.stagnation_streak,
+                "scene_stagnation_streak": scene_stagnation_streak,
                 "escape_mode": escape_mode,
             },
         )
@@ -574,6 +621,7 @@ class SimulationEngine:
         novelty_fact_delta = float((novelty_result.signals.get("novel_fact", 0.0) if novelty_result else 0.0))
         novelty_type_delta = float((novelty_result.signals.get("novel_type", 0.0) if novelty_result else 0.0))
         novelty_refs_delta = float((novelty_result.signals.get("novel_refs", 0.0) if novelty_result else 0.0))
+        novelty_fact_specificity = float((novelty_result.signals.get("fact_specificity_score", 0.0) if novelty_result else 0.0))
         signal_means = {
             "closure_risk": round(sum(r.signals["closure_risk"] for r in results) / len(results), 3),
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
@@ -588,6 +636,7 @@ class SimulationEngine:
             "novel_fact": round(novelty_fact_delta, 3),
             "novel_type": round(novelty_type_delta, 3),
             "novel_refs": round(novelty_refs_delta, 3),
+            "fact_specificity_score": round(novelty_fact_specificity, 3),
             "progress_gate": 1.0 if progress_gate else 0.0,
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
@@ -1000,6 +1049,7 @@ class SimulationEngine:
                         "novel_fact": signals.get("novel_fact", 0.0),
                         "novel_type": signals.get("novel_type", 0.0),
                         "novel_refs": signals.get("novel_refs", 0.0),
+                        "fact_specificity_score": signals.get("fact_specificity_score", 0.0),
                         "tension_progress": signals.get("tension_progress", 0.0),
                         "verdict": adjusted_verdict.value,
                         "llm_used": bool(candidate.meta_m.get("llm_used", False)),
@@ -1054,6 +1104,19 @@ class SimulationEngine:
                 self.steps_since_new_fact = 0
             else:
                 self.steps_since_new_fact += 1
+
+            scene_stagnation_threshold = self._progression_float("scene_stagnation_similarity_threshold", 0.95)
+            branch_states = self.store.list_states(branch_id=branch["branch_id"])
+            if len(branch_states) >= 2:
+                prev_scene = str(branch_states[-2].get("meta_m", {}).get("story_bundle", {}).get("scene", "")).strip() or str(branch_states[-2].get("artifact_x", "")).strip()
+                curr_scene = str(branch_states[-1].get("meta_m", {}).get("story_bundle", {}).get("scene", "")).strip() or str(branch_states[-1].get("artifact_x", "")).strip()
+                scene_sim = self._semantic_similarity(prev_scene, curr_scene)
+                if scene_sim > scene_stagnation_threshold:
+                    self.scene_stagnation_by_branch[branch["branch_id"]] = int(self.scene_stagnation_by_branch.get(branch["branch_id"], 0)) + 1
+                else:
+                    self.scene_stagnation_by_branch[branch["branch_id"]] = 0
+            else:
+                self.scene_stagnation_by_branch[branch["branch_id"]] = 0
             ontological = self._ontological_stagnation(branch["branch_id"])
             self.ontological_stagnation_score = float(ontological["score"])
             if self.ontological_stagnation_score >= self._progression_float("stagnation_threshold", 0.66):
@@ -1126,6 +1189,7 @@ class SimulationEngine:
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,
                         "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
+                        "scene_stagnation_streak": int(self.scene_stagnation_by_branch.get(branch["branch_id"], 0)),
                         "projection_fact_ids": list(challenge.verifier_policy.get("last_fact_ids", [])),
                         "scene": story_bundle.get("scene", ""),
                         "deferred_tension": story_bundle.get("deferred_tension", ""),
