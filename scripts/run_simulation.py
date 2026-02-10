@@ -76,6 +76,7 @@ def _render_progress(update: dict) -> None:
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
     escape_mode = bool(update.get("escape_mode"))
+    projection_fact_ids = update.get("projection_fact_ids") or []
     candidate_traces = update.get("candidate_traces") or []
     tension = str(update.get("deferred_tension") or "")
 
@@ -101,6 +102,8 @@ def _render_progress(update: dict) -> None:
         f"{_style('ontological:', f'{ontological_stagnation:.3f}', color='95')} "
         f"{_style('anchors:', str(active_anchor_count), color='96')}"
     )
+    if projection_fact_ids:
+        print(_style("projection_fact_ids:", ", ".join(str(x) for x in projection_fact_ids[-8:]), color="94"))
     print(_style("narrative:", narrative if narrative else "(no narrative available)", color="36"))
     if candidate_preview:
         extra = f"score={candidate_score}" if candidate_score is not None else "score=n/a"
@@ -121,6 +124,7 @@ def _render_progress(update: dict) -> None:
                         f"new_facts={trace.get('new_fact_count')} refs={trace.get('reference_count')} refs_q={trace.get('refs_quality')} progress_gate={trace.get('progress_gate')} "
                         f"novelty={trace.get('novelty_score')} (fact={trace.get('novel_fact')},type={trace.get('novel_type')},refs={trace.get('novel_refs')}) "
                         f"tension_prog={trace.get('tension_progress')} escape={trace.get('escape_mode')} "
+                        f"fact_id={trace.get('fact_id')} fact_type={trace.get('fact_type')} refs={trace.get('fact_refs')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),

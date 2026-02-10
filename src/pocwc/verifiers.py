@@ -187,6 +187,7 @@ class NoveltyGateVerifier:
         enforce_dependency_accumulation = bool(policy.get("enforce_dependency_accumulation", True))
         min_refs_at_height_2 = max(0, int(policy.get("min_refs_height_2", 1)))
         min_refs_at_height_5 = max(0, int(policy.get("min_refs_height_5", 2)))
+        hard_refs_from_step_2 = bool(policy.get("hard_refs_from_step_2", True))
         refs_quality_min_height_2 = max(0.0, float(policy.get("refs_quality_min_height_2", 0.8)))
         refs_quality_min_height_5 = max(0.0, float(policy.get("refs_quality_min_height_5", 1.2)))
         refs_quality_alpha = max(0.01, float(policy.get("refs_quality_alpha", 0.18)))
@@ -275,6 +276,8 @@ class NoveltyGateVerifier:
         elif current_height >= 2:
             refs_min = min_refs_at_height_2
             refs_quality_min = refs_quality_min_height_2
+        if hard_refs_from_step_2 and current_height >= 2:
+            refs_min = max(1, refs_min)
         if (refs_count < refs_min) and (refs_quality < refs_quality_min) and len(active_anchor_ids) >= max(1, refs_min):
             hard_fail = True
             reasons.append("Novelty gate failed: reference accumulation policy violated")

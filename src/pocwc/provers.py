@@ -153,8 +153,12 @@ class Prover:
         fact_objects = list(profile.get("fact_objects", [])) or ["a document", "an artifact", "a log discrepancy", "a sealed record"]
 
         active_anchor_ids = [str(x) for x in challenge.verifier_policy.get("active_anchor_ids", []) if str(x).strip()]
+        last_fact_ids = [str(x) for x in challenge.verifier_policy.get("last_fact_ids", []) if str(x).strip()]
+        anchor_pool = last_fact_ids or active_anchor_ids
         max_refs = int(challenge.verifier_policy.get("required_reference_count", 2))
-        references = active_anchor_ids[-max_refs:] if active_anchor_ids else []
+        references = anchor_pool[-max_refs:] if anchor_pool else []
+        if anchor_pool and not references:
+            references = [anchor_pool[-1]]
         if challenge.verifier_policy.get("escape_mode") and active_anchor_ids and not references:
             references = [active_anchor_ids[-1]]
 
@@ -293,6 +297,7 @@ class Prover:
             f"Language requirement: produce all narrative text in {self.story_language}.\n"
             "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure. "
             "Use one clearly named new fact only. Include references to prior anchor IDs when available. "
+            f"Available prior fact IDs: {challenge.verifier_policy.get('last_fact_ids', [])}\n"
             "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement."
         )
         if escape_mode:

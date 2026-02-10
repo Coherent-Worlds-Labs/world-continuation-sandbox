@@ -79,6 +79,7 @@
     "scene_repeat_threshold": 0.97,
     "min_refs_height_2": 1,
     "min_refs_height_5": 2,
+    "hard_refs_from_step_2": true,
     "refs_quality_min_height_2": 0.8,
     "refs_quality_min_height_5": 1.2,
     "refs_quality_alpha": 0.18,

@@ -83,6 +83,7 @@ Runtime stream notes:
 - Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
 - Diversify mode now pushes stronger novelty pressure: directives are biased toward non-maintenance events, prompt constraints require one concrete new event per step, and high overlap candidates receive a bounded repetition penalty.
 - After repeated rejections, deterministic escape mode activates and forces concrete directives plus stricter fact-object output requirements.
+- Threshold-relaxation acceptance bypass is disabled: rejected candidates are no longer auto-accepted just because score is near `theta`.
 
 Novelty contract:
 

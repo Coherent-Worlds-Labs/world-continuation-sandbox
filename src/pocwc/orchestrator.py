@@ -395,6 +395,13 @@ class SimulationEngine:
             directive = self.rng.choice([str(x) for x in forced_directives if str(x).strip()] or [directive])
         if self.stagnation_streak >= 2:
             directive = self.rng.choice(["AgentCommitment", "ResourceConstraint", "InformationAsymmetry", "DelayedConsequence"])
+        max_streak = max(1, int(getattr(self.taskgen, "max_same_directive_streak", 2)))
+        if len(recent_directives) >= max_streak:
+            tail = recent_directives[-max_streak:]
+            if tail and all(item == tail[0] for item in tail) and directive == tail[0]:
+                alternatives = [d for d in self.taskgen._base_pool(signals, self.controller_state.mode) if d != directive]  # noqa: SLF001
+                if alternatives:
+                    directive = self.rng.choice(alternatives)
         difficulty = self.taskgen.build_difficulty(
             self.controller_state.difficulty,
             signals,
@@ -418,7 +425,15 @@ class SimulationEngine:
         if recent_facts:
             projection = (
                 f"{projection}\n\nRecent branch facts (avoid rephrasing these as new):\n"
-                + "\n".join(f"- {str(f.get('fact_text', ''))}" for f in recent_facts[:8])
+                + "\n".join(
+                    f"- {str(f.get('fact_id', '')).strip()} :: {str(f.get('anchor_type', '')).strip()} :: {str(f.get('fact_text', ''))}"
+                    for f in recent_facts[:8]
+                )
+            )
+        if active_anchor_ids:
+            projection = (
+                f"{projection}\n\nAvailable prior fact IDs (use these in refs):\n"
+                + ", ".join(active_anchor_ids[-12:])
             )
         if escape_mode:
             projection = (
@@ -446,6 +461,7 @@ class SimulationEngine:
         novelty_min_late = self._progression_float("novelty_min_late", 0.60)
         type_memory_window = self._progression_int("type_memory_window", 7)
         refs_target = self._progression_int("refs_target", 2)
+        hard_refs_from_step_2 = bool(self.progression.get("hard_refs_from_step_2", True))
         novelty_phase_early_end = self._progression_int("novelty_phase_early_end", 5)
         novelty_phase_mid_end = self._progression_int("novelty_phase_mid_end", 20)
         sim_fact_max = self._progression_float("sim_fact_max", hard_similarity_threshold)
@@ -470,6 +486,7 @@ class SimulationEngine:
                     if str(f.get("fact_id", "")).strip()
                 },
                 "active_anchor_ids": active_anchor_ids,
+                "last_fact_ids": active_anchor_ids[-12:],
                 "recent_directives": recent_directives,
                 "required_families": required_families,
                 "required_min_new_facts": required_min_new_facts,
@@ -490,6 +507,7 @@ class SimulationEngine:
                 "novelty_min_late": novelty_min_late,
                 "type_memory_window": type_memory_window,
                 "refs_target": refs_target,
+                "hard_refs_from_step_2": hard_refs_from_step_2,
                 "novelty_phase_early_end": novelty_phase_early_end,
                 "novelty_phase_mid_end": novelty_phase_mid_end,
                 "sim_fact_max": sim_fact_max,
@@ -645,6 +663,25 @@ class SimulationEngine:
         self.runtime.accepted_candidates += 1
 
     def _record_branch_facts(self, *, branch_id: str, state_id: str, state_height: int, facts: Any, fact_object: Any) -> None:
+        existing_ids = {
+            str(row.get("fact_id", "")).strip()
+            for row in self.store.list_branch_facts(branch_id, limit=3000)
+            if str(row.get("fact_id", "")).strip()
+        }
+
+        def ensure_unique_fact_id(raw_id: str, index: int) -> str:
+            base = raw_id.strip() or f"{state_id}-fact-{index + 1}"
+            if base not in existing_ids:
+                existing_ids.add(base)
+                return base
+            candidate = f"{base}::{state_id}"
+            suffix = 1
+            while candidate in existing_ids:
+                suffix += 1
+                candidate = f"{base}::{state_id}::{suffix}"
+            existing_ids.add(candidate)
+            return candidate
+
         canonical_facts: list[dict[str, Any]] = []
         if isinstance(fact_object, dict) and str(fact_object.get("id", "")).strip():
             evidence_raw = fact_object.get("evidence", "")
@@ -685,6 +722,7 @@ class SimulationEngine:
         for index, item in enumerate(canonical_facts):
             if not isinstance(item, dict):
                 continue
+            unique_fact_id = ensure_unique_fact_id(str(item.get("fact_id", "")), index)
             fact_text = self._fact_text(item)
             if not fact_text:
                 continue
@@ -695,7 +733,7 @@ class SimulationEngine:
                 {
                     "branch_id": branch_id,
                     "state_id": state_id,
-                    "fact_id": str(item.get("fact_id", f"{state_id}-fact-{index + 1}")),
+                    "fact_id": unique_fact_id,
                     "anchor_type": str(item.get("anchor_type", "public_artifact")),
                     "subject": str(item.get("subject", "")),
                     "predicate": str(item.get("predicate", "")),
@@ -968,6 +1006,11 @@ class SimulationEngine:
                         "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
                         "llm_error": str(candidate.meta_m.get("llm_error", "")),
                         "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
+                        "fact_id": str(candidate.meta_m.get("fact_object", {}).get("id", "")),
+                        "fact_type": str(candidate.meta_m.get("fact_object", {}).get("type", "")),
+                        "fact_refs": list(candidate.meta_m.get("fact_object", {}).get("references", []))
+                        if isinstance(candidate.meta_m.get("fact_object", {}).get("references", []), list)
+                        else [],
                     }
                 )
                 if adjusted_score > best_any_score:
@@ -992,15 +1035,6 @@ class SimulationEngine:
             else:
                 self.runtime.rejected_candidates += 1
                 reject_streak += 1
-                # Adaptive retry: after consecutive rejects, accept the strongest candidate near threshold.
-                adaptive_threshold = max(0.45, self.controller_state.theta - 0.08)
-                if best_any_candidate is not None and reject_streak >= 2 and best_any_score >= adaptive_threshold:
-                    self._accept_candidate(challenge, best_any_candidate, best_any_score, best_any_meta, best_any_levels)
-                    self._maybe_create_fork(challenge, best_any_candidate)
-                    self.runtime.rejected_candidates = max(0, self.runtime.rejected_candidates - 1)
-                    reject_streak = 0
-                    accepted_via_retry = True
-                    new_fact_count_current = int(best_any_meta.get("new_fact_count", 0.0))
                 stale = self.store.get_branch(branch["branch_id"])
                 if stale is not None:
                     self.store.upsert_branch(
@@ -1092,6 +1126,7 @@ class SimulationEngine:
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,
                         "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
+                        "projection_fact_ids": list(challenge.verifier_policy.get("last_fact_ids", [])),
                         "scene": story_bundle.get("scene", ""),
                         "deferred_tension": story_bundle.get("deferred_tension", ""),
                     }
