@@ -44,6 +44,22 @@ class SimulationEngine:
             base_url_override=config.llm_base_url,
         )
         llm_adapter = create_llm_adapter(llm_settings)
+        if llm_adapter is not None:
+            llm_reason = "ready"
+        elif llm_settings.provider == "none":
+            llm_reason = "provider=none"
+        elif not llm_settings.model:
+            llm_reason = "missing model"
+        elif not llm_settings.api_key:
+            llm_reason = "missing OPENROUTER_API_KEY"
+        else:
+            llm_reason = "adapter initialization failed"
+        self.llm_status = {
+            "enabled": llm_adapter is not None,
+            "provider": llm_settings.provider,
+            "model": llm_settings.model,
+            "reason": llm_reason,
+        }
         self.provers = default_provers(self.rng, llm_adapter, config.story_language)
         self.verifiers = default_verifiers(self.rng, llm_adapter)
         self.aggregator = Aggregator()
@@ -215,7 +231,11 @@ class SimulationEngine:
         )
         return challenge
 
-    def _evaluate_candidate(self, challenge: Challenge, candidate) -> tuple[Verdict, float, dict[str, Any], dict[str, int]]:
+    def _evaluate_candidate(
+        self,
+        challenge: Challenge,
+        candidate,
+    ) -> tuple[Verdict, float, dict[str, Any], dict[str, int], list[str]]:
         results = [v.evaluate(challenge, candidate, allow_l3=True) for v in self.verifiers]
         for result in results:
             self.store.insert_verification_result(
@@ -237,7 +257,7 @@ class SimulationEngine:
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
             "fragility_score": round(sum(r.signals["fragility_score"] for r in results) / len(results), 3),
         }
-        return decision.verdict, decision.score, signal_means, decision.level_counts
+        return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
 
     def _accept_candidate(self, challenge: Challenge, candidate, score: float, signals: dict[str, float], level_counts: dict[str, int]) -> None:
         parent = self.store.get_state(challenge.parent_state_id)
@@ -413,6 +433,7 @@ class SimulationEngine:
         self._seed_genesis()
         total_steps = steps or self.config.steps
         existing_challenges = len(self.store.list_challenges())
+        reject_streak = 0
 
         for offset in range(1, total_steps + 1):
             step = existing_challenges + offset
@@ -424,6 +445,12 @@ class SimulationEngine:
             best_score = 0.0
             best_meta: dict[str, Any] = {}
             best_levels: dict[str, int] = {}
+            best_any_candidate = None
+            best_any_score = -1.0
+            best_any_meta: dict[str, Any] = {}
+            best_any_levels: dict[str, int] = {}
+            best_any_reasons: list[str] = []
+            accepted_via_retry = False
 
             for index, prover in enumerate(self.provers, start=1):
                 candidate = prover.generate(challenge, index)
@@ -438,7 +465,13 @@ class SimulationEngine:
                         "created_at": self._now(),
                     }
                 )
-                verdict, score, signals, levels = self._evaluate_candidate(challenge, candidate)
+                verdict, score, signals, levels, reasons = self._evaluate_candidate(challenge, candidate)
+                if score > best_any_score:
+                    best_any_candidate = candidate
+                    best_any_score = score
+                    best_any_meta = signals
+                    best_any_levels = levels
+                    best_any_reasons = reasons
                 if verdict == Verdict.ACCEPT and score > best_score:
                     accepted_candidate = candidate
                     best_score = score
@@ -449,8 +482,18 @@ class SimulationEngine:
             if accepted_candidate is not None:
                 self._accept_candidate(challenge, accepted_candidate, best_score, best_meta, best_levels)
                 self._maybe_create_fork(challenge, accepted_candidate)
+                reject_streak = 0
             else:
                 self.runtime.rejected_candidates += 1
+                reject_streak += 1
+                # Adaptive retry: after consecutive rejects, accept the strongest candidate near threshold.
+                adaptive_threshold = max(0.45, self.controller_state.theta - 0.08)
+                if best_any_candidate is not None and reject_streak >= 2 and best_any_score >= adaptive_threshold:
+                    self._accept_candidate(challenge, best_any_candidate, best_any_score, best_any_meta, best_any_levels)
+                    self._maybe_create_fork(challenge, best_any_candidate)
+                    self.runtime.rejected_candidates = max(0, self.runtime.rejected_candidates - 1)
+                    reject_streak = 0
+                    accepted_via_retry = True
                 stale = self.store.get_branch(branch["branch_id"])
                 if stale is not None:
                     self.store.upsert_branch(
@@ -488,6 +531,7 @@ class SimulationEngine:
                 head_node = self.store.get_state(head_id) if head_id else None
                 artifact = head_node["artifact_x"] if head_node else ""
                 story_bundle = (head_node or {}).get("meta_m", {}).get("story_bundle", {}) if head_node else {}
+                candidate_artifact = best_any_candidate.artifact_x if best_any_candidate is not None else ""
                 progress_callback(
                     {
                         "step": step,
@@ -501,6 +545,11 @@ class SimulationEngine:
                         "mode": self.controller_state.mode,
                         "theta": self.controller_state.theta,
                         "artifact": artifact,
+                        "candidate_artifact": candidate_artifact,
+                        "candidate_score": round(best_any_score, 3) if best_any_score >= 0 else None,
+                        "decision_reasons": best_any_reasons,
+                        "accepted_via_retry": accepted_via_retry,
+                        "reject_streak": reject_streak,
                         "scene": story_bundle.get("scene", ""),
                         "deferred_tension": story_bundle.get("deferred_tension", ""),
                     }
