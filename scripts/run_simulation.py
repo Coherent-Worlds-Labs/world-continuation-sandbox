@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--llm-provider", default=None, help="LLM provider (none|openrouter)")
     parser.add_argument("--llm-model", default=None, help="LLM model id for provider")
     parser.add_argument("--llm-base-url", default=None, help="Override provider base URL")
+    parser.add_argument("--story-language", default="english", help="Requested story generation language")
     args = parser.parse_args()
 
     engine = SimulationEngine(
@@ -25,6 +26,7 @@ def main() -> None:
             llm_provider=args.llm_provider,
             llm_model=args.llm_model,
             llm_base_url=args.llm_base_url,
+            story_language=args.story_language,
         )
     )
     summary = engine.run(args.steps)

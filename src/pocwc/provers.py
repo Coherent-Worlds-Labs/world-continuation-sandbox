@@ -14,6 +14,7 @@ class Prover:
     style: str
     rng: random.Random
     llm: LLMAdapter | None = None
+    story_language: str = "english"
 
     def generate(self, challenge: Challenge, ordinal: int) -> Candidate:
         base_strength = {
@@ -35,6 +36,7 @@ class Prover:
         bundle = self._fallback_bundle(strengths)
         artifact = self._bundle_to_artifact(bundle)
         meta = self._bundle_to_meta(bundle, strengths)
+        meta["story_language_requested"] = self.story_language
 
         if self.llm is not None:
             llm_payload = self._generate_with_llm(challenge, strengths)
@@ -43,6 +45,7 @@ class Prover:
                 llm_bundle = llm_payload.get("bundle", bundle)
                 bundle = llm_bundle if isinstance(llm_bundle, dict) else bundle
                 meta = self._bundle_to_meta(bundle, strengths)
+                meta["story_language_requested"] = self.story_language
 
         return Candidate(
             candidate_id=f"{challenge.challenge_id}-cand-{ordinal}",
@@ -110,7 +113,7 @@ class Prover:
     def _generate_with_llm(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any] | None:
         system = (
             "You generate PoCWC world continuations. Output valid JSON only. "
-            "Keep all text in English. Do not reveal final truth."
+            "Do not reveal final truth."
         )
         prompt = (
             "Return JSON with keys: artifact_x (string), bundle (object with keys "
@@ -118,6 +121,7 @@ class Prover:
             f"Directive: {challenge.directive_type}. Style: {self.style}. "
             f"Projection: {challenge.projection}\n"
             f"Interpretation strengths seed: {strengths}\n"
+            f"Language requirement: produce all narrative text in {self.story_language}.\n"
             "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure."
         )
         try:
@@ -127,9 +131,9 @@ class Prover:
         return payload if isinstance(payload, dict) else None
 
 
-def default_provers(rng: random.Random, llm: LLMAdapter | None = None) -> list[Prover]:
+def default_provers(rng: random.Random, llm: LLMAdapter | None = None, story_language: str = "english") -> list[Prover]:
     return [
-        Prover("prover-conservative", "conservative", rng, llm),
-        Prover("prover-aggressive", "aggressive", rng, llm),
-        Prover("prover-maintenance", "maintenance", rng, llm),
+        Prover("prover-conservative", "conservative", rng, llm, story_language),
+        Prover("prover-aggressive", "aggressive", rng, llm, story_language),
+        Prover("prover-maintenance", "maintenance", rng, llm, story_language),
     ]

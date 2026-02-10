@@ -57,6 +57,24 @@ class FallbackExecutionTests(unittest.TestCase):
             os.environ.clear()
             os.environ.update(old)
 
+    def test_story_language_metadata_propagates(self) -> None:
+        db = Path("data/test_world_story_language.db")
+        if db.exists():
+            db.unlink()
+
+        engine = SimulationEngine(
+            SimulationConfig(
+                db_path=db,
+                steps=2,
+                seed=23,
+                story_language="spanish",
+            )
+        )
+        engine.run(2)
+        states = engine.store.list_states(branch_id="branch-main")
+        latest = states[-1]
+        self.assertEqual(latest["meta_m"].get("story_language_requested"), "spanish")
+
 
 if __name__ == "__main__":
     unittest.main()
