@@ -154,6 +154,7 @@ World-specific setup is centralized in `config/world.default.json`, including:
 - fallback narrative templates used when LLM is unavailable.
 
 You can supply a custom file via `--world-config` in both `run_simulation.py` and `run_server.py`.
+The runtime source code keeps no world narrative constants; world content is read from config files.
 
 ## License
 

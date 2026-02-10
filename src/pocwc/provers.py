@@ -81,16 +81,16 @@ class Prover:
     def _fallback_bundle(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any]:
         strongest = max(strengths, key=strengths.get)
         scene_templates = [
-            "Alice notices another discrepancy in records that should have remained stable.",
-            "Alice observes a new contradiction between witness logs and municipal archives.",
-            "Alice receives a field report that conflicts with the official timeline.",
-            "Alice traces a fresh mismatch across two agencies that should share the same source data.",
+            "A new discrepancy appears in the shared records.",
+            "An observer notes a contradiction between witness logs and system archives.",
+            "A field report conflicts with the official timeline.",
+            "Two agencies publish diverging source records for the same event.",
         ]
         event_templates = [
-            "A courier delivers an annotated map from the old transit office at dawn.",
-            "A maintenance team finds a sealed container near the river checkpoint at midnight.",
-            "A council aide releases a timestamped memo from the northern district archive.",
-            "A volunteer scanner uncovers a mislabeled evidence card in the central depot.",
+            "A courier delivers an annotated map at dawn.",
+            "A maintenance team finds a sealed container at midnight.",
+            "A council aide releases a timestamped memo from a restricted archive.",
+            "A volunteer scanner uncovers a mislabeled evidence card in a public depot.",
         ]
         profile = self.world_profile or {}
         scene_templates = list(profile.get("scene_templates", scene_templates)) or scene_templates

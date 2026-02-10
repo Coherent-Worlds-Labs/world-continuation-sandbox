@@ -146,11 +146,11 @@ class SimulationEngine:
 
         genesis = self.world.get("genesis", {})
         continuity = self.world.get("continuity", {})
-        anchor = str(self.world.get("anchor_character", "Alice"))
+        anchor = str(self.world.get("anchor_character", "anchor"))
         state_id = str(genesis.get("state_id", "state-0"))
         branch_id = self.main_branch_id
         created_at = self._now()
-        interpretation_strength = genesis.get("interpretation_strength", {"I1": 0.34, "I2": 0.33, "I3": 0.33})
+        interpretation_strength = genesis.get("interpretation_strength", {})
         branch_metrics = genesis.get(
             "branch_metrics",
             {"semantic_debt_est": 0.5, "uncertainty": 0.5, "closure_pressure": 0.5, "chaos_pressure": 0.5},
@@ -167,16 +167,12 @@ class SimulationEngine:
                 "artifact_x": str(
                     genesis.get(
                         "artifact_x",
-                        (
-                            "In Alice's city, a foundational event happened years ago, yet no one can state what truly happened. "
-                            "Some call it an accident, others an experiment, others a cumulative drift. "
-                            "Every new fact shifts plausibility, but no interpretation reaches final truth."
-                        ),
+                        "",
                     )
                 ),
                 "meta_m": {
-                    "entities": list(genesis.get("entities", ["E0", anchor, "I1", "I2", "I3"])),
-                    "threads": list(genesis.get("threads", ["origin ambiguity", "institutional trust", "memory reliability"])),
+                    "entities": list(genesis.get("entities", [])),
+                    "threads": list(genesis.get("threads", [])),
                     "interpretation_strength": interpretation_strength,
                     "story_bundle": story_bundle,
                 },
@@ -206,19 +202,19 @@ class SimulationEngine:
                     "known_entities": list(
                         story_memory.get(
                             "known_entities",
-                            continuity.get("default_known_entities", ["E0", anchor, "city archive"]),
+                            continuity.get("default_known_entities", [anchor]),
                         )
                     ),
                     "unresolved_tensions": list(
                         story_memory.get(
                             "unresolved_tensions",
-                            ["What happened at E0", "Whether records reflect truth or process noise"],
+                            [],
                         )
                     ),
                     "timeline_highlights": list(
                         story_memory.get(
                             "timeline_highlights",
-                            ["Genesis uncertainty is stable and no final truth is available."],
+                            [],
                         )
                     ),
                 },
@@ -230,20 +226,20 @@ class SimulationEngine:
                 "branch_id": branch_id,
                 "state_id": state_id,
                 "height": 0,
-                "title": str(story_event.get("title", "Genesis: The City After E0")),
-                "scene": str(story_event.get("scene", f"{anchor} and the city hold incompatible memories of a foundational event.")),
-                "surface_confirmation": str(story_event.get("surface_confirmation", "No interpretation is final.")),
+                "title": str(story_event.get("title", "Genesis")),
+                "scene": str(story_event.get("scene", "")),
+                "surface_confirmation": str(story_event.get("surface_confirmation", "")),
                 "alternative_compatibility": list(
                     story_event.get(
                         "alternative_compatibility",
-                        ["Accident narrative", "Experiment narrative", "Cumulative drift narrative"],
+                        [],
                     )
                 ),
                 "social_effect": str(
-                    story_event.get("social_effect", "Interpretive camps emerge without resolving the underlying event.")
+                    story_event.get("social_effect", "")
                 ),
                 "deferred_tension": str(
-                    story_event.get("deferred_tension", f"{anchor} cannot map memory certainty to objective evidence.")
+                    story_event.get("deferred_tension", "")
                 ),
                 "created_at": created_at,
             }
@@ -418,12 +414,12 @@ class SimulationEngine:
     def _update_story_continuity(self, *, branch_id: str, state_id: str, height: int, story_bundle: dict[str, Any]) -> None:
         memory = self.store.get_story_memory(branch_id)
         continuity_cfg = self.world.get("continuity", {})
-        anchor = str(self.world.get("anchor_character", "Alice"))
+        anchor = str(self.world.get("anchor_character", "anchor"))
         continuity = memory.get("continuity", {}) if memory else {}
         known_entities = set(
             continuity.get(
                 "known_entities",
-                continuity_cfg.get("default_known_entities", ["E0", anchor, "city archive"]),
+                continuity_cfg.get("default_known_entities", [anchor]),
             )
         )
         unresolved = list(continuity.get("unresolved_tensions", []))
@@ -434,8 +430,6 @@ class SimulationEngine:
         tension = str(story_bundle.get("deferred_tension", ""))
         if anchor in scene:
             known_entities.add(anchor)
-        if "archive" in scene.lower():
-            known_entities.add("city archive")
         if tension:
             unresolved.append(tension)
         if scene:
