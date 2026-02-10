@@ -1,7 +1,8 @@
 ---
 id: "202602100108-8ES5MV"
 title: "Implement LLM trace, artifact guardrail, and CLI sampling args"
-status: "DOING"
+result_summary: "LLM trace and guardrails delivered"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T01:11:05.876Z"
   updated_by: "TESTER"
   note: "All tests pass (10). Smoke run confirms --llm-temperature/--llm-top-p rendering and per-candidate trace lines with llm_used/source; artifact guardrail test for placeholder artifact_x added and passing."
-commit: null
+commit:
+  hash: "30aec9bb703be0ab9a89639bebcd206bc872e780"
+  message: "✅ 8ES5MV backend: add llm trace guardrails and sampling args"
 comments:
   -
     author: "CODER"
     body: "Start: implementing llm trace telemetry, artifact placeholder guardrail, and configurable llm sampling arguments."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: per-candidate llm_used trace output added, placeholder artifact_x guardrail enforced with rebuild/fallback path, and CLI sampling args (--llm-temperature/--llm-top-p) wired end-to-end."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "All tests pass (10). Smoke run confirms --llm-temperature/--llm-top-p rendering and per-candidate trace lines with llm_used/source; artifact guardrail test for placeholder artifact_x added and passing."
+  -
+    type: "status"
+    at: "2026-02-10T01:13:10.720Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: per-candidate llm_used trace output added, placeholder artifact_x guardrail enforced with rebuild/fallback path, and CLI sampling args (--llm-temperature/--llm-top-p) wired end-to-end."
 doc_version: 2
-doc_updated_at: "2026-02-10T01:11:05.878Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T01:13:10.720Z"
+doc_updated_by: "INTEGRATOR"
 description: "Add per-candidate llm_used trace output, reject placeholder artifact_x values from LLM responses, and expose --llm-temperature/--llm-top-p in CLI and adapter path."
 id_source: "generated"
 ---

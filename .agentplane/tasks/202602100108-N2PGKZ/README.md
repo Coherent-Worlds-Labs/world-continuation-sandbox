@@ -1,7 +1,8 @@
 ---
 id: "202602100108-N2PGKZ"
 title: "Tracking: LLM trace, artifact validation, and sampling controls"
-status: "TODO"
+result_summary: "Tracking closed"
+status: "DONE"
 priority: "high"
 owner: "ORCHESTRATOR"
 depends_on:
@@ -15,16 +16,34 @@ plan_approval:
   updated_by: "ORCHESTRATOR"
   note: "Tracking plan approved."
 verification:
-  state: "pending"
-  updated_at: null
-  updated_by: null
-  note: null
-commit: null
-comments: []
-events: []
+  state: "ok"
+  updated_at: "2026-02-10T01:13:17.968Z"
+  updated_by: "TESTER"
+  note: "Implementation task 202602100108-8ES5MV is DONE with commit 30aec9bb703b; verify evidence includes tests and smoke output with trace and sampling args."
+commit:
+  hash: "30aec9bb703be0ab9a89639bebcd206bc872e780"
+  message: "✅ 8ES5MV backend: add llm trace guardrails and sampling args"
+comments:
+  -
+    author: "INTEGRATOR"
+    body: "Verified: all three requested runtime changes are implemented, tested, and linked to implementation commit."
+events:
+  -
+    type: "verify"
+    at: "2026-02-10T01:13:17.968Z"
+    author: "TESTER"
+    state: "ok"
+    note: "Implementation task 202602100108-8ES5MV is DONE with commit 30aec9bb703b; verify evidence includes tests and smoke output with trace and sampling args."
+  -
+    type: "status"
+    at: "2026-02-10T01:13:24.328Z"
+    author: "INTEGRATOR"
+    from: "TODO"
+    to: "DONE"
+    note: "Verified: all three requested runtime changes are implemented, tested, and linked to implementation commit."
 doc_version: 2
-doc_updated_at: "2026-02-10T01:12:46.995Z"
-doc_updated_by: "ORCHESTRATOR"
+doc_updated_at: "2026-02-10T01:13:24.328Z"
+doc_updated_by: "INTEGRATOR"
 description: "Track implementation of per-candidate llm usage trace, strict artifact_x placeholder rejection, and CLI LLM sampling controls."
 id_source: "generated"
 ---
@@ -46,6 +65,20 @@ Main risk is increased console verbosity from trace lines; acceptable for diagno
 
 ## Verification
 
+### Plan
+
+### Results
+
+<!-- BEGIN VERIFICATION RESULTS -->
+#### 2026-02-10T01:13:17.968Z — VERIFY — ok
+
+By: TESTER
+
+Note: Implementation task 202602100108-8ES5MV is DONE with commit 30aec9bb703b; verify evidence includes tests and smoke output with trace and sampling args.
+
+VerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T01:12:46.995Z, excerpt_hash=sha256:9e465b8eb8fa88616359fe8a439ffcff9c8d329424c2048b46299040ced17d28
+
+<!-- END VERIFICATION RESULTS -->
 
 ## Rollback Plan
 
