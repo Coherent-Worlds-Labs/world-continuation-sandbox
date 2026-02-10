@@ -1,7 +1,8 @@
 ---
 id: "202602101757-9NRP9V"
 title: "Introduce persistent world anchors"
-status: "DOING"
+result_summary: "FIX1 anti-treadmill controls implemented and validated."
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T18:27:13.775Z"
   updated_by: "CODER"
   note: "All automated checks passed: python -m pytest tests -q (15 passed). Smoke run passed: run_simulation produced integer fact counts, anchor references, and ontological stagnation telemetry."
-commit: null
+commit:
+  hash: "71aea9c3368cc0525fd40e2fbe8dce946c970686"
+  message: "✅ D0C9NA backend: implement FIX1 anti-treadmill progression stack"
 comments:
   -
     author: "CODER"
     body: "Start: Add persistent world-anchor schema and anchor reference enforcement across accepted steps."
+  -
+    author: "CODER"
+    body: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 events:
   -
     type: "status"
@@ -37,8 +43,15 @@ events:
     author: "CODER"
     state: "ok"
     note: "All automated checks passed: python -m pytest tests -q (15 passed). Smoke run passed: run_simulation produced integer fact counts, anchor references, and ontological stagnation telemetry."
+  -
+    type: "status"
+    at: "2026-02-10T18:29:30.919Z"
+    author: "CODER"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 doc_version: 2
-doc_updated_at: "2026-02-10T18:27:13.778Z"
+doc_updated_at: "2026-02-10T18:29:30.919Z"
 doc_updated_by: "CODER"
 description: "Add explicit world-anchor schema and generation/verification contracts based on anchor IDs."
 id_source: "generated"

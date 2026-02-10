@@ -1,7 +1,8 @@
 ---
 id: "202602101757-D0C9NA"
 title: "PoCWC treadmill fixes tracking"
-status: "DOING"
+result_summary: "FIX1 anti-treadmill controls implemented and validated."
+status: "DONE"
 priority: "high"
 owner: "ORCHESTRATOR"
 depends_on:
@@ -22,15 +23,20 @@ plan_approval:
   updated_by: "ORCHESTRATOR"
   note: "Approved after FIX1 decomposition and verify contract review."
 verification:
-  state: "pending"
-  updated_at: null
-  updated_by: null
-  note: null
-commit: null
+  state: "ok"
+  updated_at: "2026-02-10T18:29:16.524Z"
+  updated_by: "ORCHESTRATOR"
+  note: "All downstream tasks verified with passing automated checks and smoke run evidence."
+commit:
+  hash: "71aea9c3368cc0525fd40e2fbe8dce946c970686"
+  message: "✅ D0C9NA backend: implement FIX1 anti-treadmill progression stack"
 comments:
   -
     author: "ORCHESTRATOR"
     body: "Start: Executing approved FIX1 decomposition end-to-end with code, UI, tests, verification, and closure evidence."
+  -
+    author: "ORCHESTRATOR"
+    body: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 events:
   -
     type: "status"
@@ -39,8 +45,21 @@ events:
     from: "TODO"
     to: "DOING"
     note: "Start: Executing approved FIX1 decomposition end-to-end with code, UI, tests, verification, and closure evidence."
+  -
+    type: "verify"
+    at: "2026-02-10T18:29:16.524Z"
+    author: "ORCHESTRATOR"
+    state: "ok"
+    note: "All downstream tasks verified with passing automated checks and smoke run evidence."
+  -
+    type: "status"
+    at: "2026-02-10T18:29:35.090Z"
+    author: "ORCHESTRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 doc_version: 2
-doc_updated_at: "2026-02-10T18:07:43.326Z"
+doc_updated_at: "2026-02-10T18:29:35.090Z"
 doc_updated_by: "ORCHESTRATOR"
 description: "Track implementation of FIX1 improvements: structural operators, discrete facts, world anchors, dependency accumulation, ontological stagnation, active facts UI, and verification harness."
 id_source: "generated"
@@ -63,6 +82,20 @@ Risk of partial fixes that improve wording diversity but not world-state progres
 
 ## Verification
 
+### Plan
+
+### Results
+
+<!-- BEGIN VERIFICATION RESULTS -->
+#### 2026-02-10T18:29:16.524Z — VERIFY — ok
+
+By: ORCHESTRATOR
+
+Note: All downstream tasks verified with passing automated checks and smoke run evidence.
+
+VerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T18:07:43.326Z, excerpt_hash=sha256:79edad38d978221ee64237f48dd0c44793b8f0438fcb2a63227bd571fd497f5b
+
+<!-- END VERIFICATION RESULTS -->
 
 ## Rollback Plan
 

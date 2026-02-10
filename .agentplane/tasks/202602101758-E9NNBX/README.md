@@ -1,7 +1,8 @@
 ---
 id: "202602101758-E9NNBX"
 title: "Regression harness for anti-treadmill guarantees"
-status: "DOING"
+result_summary: "FIX1 anti-treadmill controls implemented and validated."
+status: "DONE"
 priority: "high"
 owner: "TESTER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T18:27:16.964Z"
   updated_by: "CODER"
   note: "All automated checks passed: python -m pytest tests -q (15 passed). Smoke run passed: run_simulation produced integer fact counts, anchor references, and ontological stagnation telemetry."
-commit: null
+commit:
+  hash: "71aea9c3368cc0525fd40e2fbe8dce946c970686"
+  message: "✅ D0C9NA backend: implement FIX1 anti-treadmill progression stack"
 comments:
   -
     author: "TESTER"
     body: "Start: Add deterministic anti-treadmill regression coverage and document acceptance criteria."
+  -
+    author: "TESTER"
+    body: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "CODER"
     state: "ok"
     note: "All automated checks passed: python -m pytest tests -q (15 passed). Smoke run passed: run_simulation produced integer fact counts, anchor references, and ontological stagnation telemetry."
+  -
+    type: "status"
+    at: "2026-02-10T18:29:34.464Z"
+    author: "TESTER"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: Implemented structural anti-treadmill controls and validated by automated tests plus simulation smoke run."
 doc_version: 2
-doc_updated_at: "2026-02-10T18:27:16.967Z"
-doc_updated_by: "CODER"
+doc_updated_at: "2026-02-10T18:29:34.464Z"
+doc_updated_by: "TESTER"
 description: "Add tests and docs to validate directive diversity, anchor growth, dependency depth growth, and stagnation detection."
 id_source: "generated"
 ---
