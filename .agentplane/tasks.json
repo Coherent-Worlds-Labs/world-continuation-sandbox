@@ -1,6 +1,6 @@
 {
   "meta": {
-    "checksum": "22158b8be4d14a8f13bd65add64f6d1f0751092779b713fc230ecfa4e5cfeda9",
+    "checksum": "cd8d245161cf67ac011512c44eede88e9f4f5f7933abf31edf53244f9e5b639e",
     "checksum_algo": "sha256",
     "managed_by": "agentplane",
     "schema_version": 1
@@ -4414,6 +4414,150 @@
         "state": "ok",
         "updated_at": "2026-02-10T20:49:18.586Z",
         "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Apply FIX4 state-evolution and anti-bypass hardening, add diagnostics, and validate with regression tests and smoke simulation."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: Enforced atomic state fact commits with unique ids, removed threshold-relax acceptance bypass, added prior-fact projection contract and hard refs-from-step2 checks, plus FIX4 regression tests."
+        }
+      ],
+      "commit": {
+        "hash": "3ef07aef69b657d8ce152a581f11a776bb8bfb0d",
+        "message": "✅ AQ5BD6 backend: implement FIX4 state-evolution and anti-bypass hardening"
+      },
+      "depends_on": [],
+      "description": "Apply FIX4: unique fact IDs on commit, explicit last_fact_ids projection, hard refs from step2, remove threshold-relax acceptance bypass, add tests and diagnostics.",
+      "dirty": false,
+      "doc": "## Summary\n\nImplement FIX4 improvements from sow/FIX4.txt with auditable verification.\n\n## Scope\n\nIn-scope: orchestrator, verifiers, provers, simulation CLI, config, tests, docs.\n\n## Plan\n\n1. Enforce state-commit invariants and remove acceptance bypass.\n2. Propagate prior fact ids into projection and references contract.\n3. Tighten verifier refs gate from step 2.\n4. Add diagnostics and regression tests.\n5. Run pytest and smoke simulation.\n\n## Risks\n\nRisk: stricter gating may reduce accept-rate; mitigated by deterministic escape mode rather than threshold relaxation.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T21:11:19.967Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: FIX4 implemented. Full test suite passes (22/22) and smoke simulation shows projection_fact_ids, nonzero refs from step2, and anchor growth diagnostics.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:11:07.958Z, excerpt_hash=sha256:fc1ac6f3a47436f8c7fdfc569f3cbe1e9375e4f2533948d1186861a22954b809\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert FIX4 commit if regressions are detected, then re-run test suite.\n\n## Context\n\nFix4 identifies state-evolution bugs (anchor growth/refs), metric inconsistency, and acceptance bypass risk.\n\n## Verify Steps\n\n1. python -m pytest tests -q\n2. python scripts/run_simulation.py --steps 8 --db data/fix4_smoke.db --seed 10\n3. Confirm projection_fact_ids, fact refs, and anchor growth appear in log.\n\n## Notes\n\n### Approvals / Overrides\nNo overrides.\n\n### Decisions\nUse hard progression constraints; do not relax acceptance thresholds.\n\n### Implementation Notes\nTo be filled at finish.\n\n### Evidence / Links\nTo be filled at verify/finish.",
+      "doc_updated_at": "2026-02-10T21:11:45.951Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:11:07.958Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Apply FIX4 state-evolution and anti-bypass hardening, add diagnostics, and validate with regression tests and smoke simulation.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T21:11:19.967Z",
+          "author": "CODER",
+          "note": "Verified: FIX4 implemented. Full test suite passes (22/22) and smoke simulation shows projection_fact_ids, nonzero refs from step2, and anchor growth diagnostics.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T21:11:45.951Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: Enforced atomic state fact commits with unique ids, removed threshold-relax acceptance bypass, added prior-fact projection contract and hard refs-from-step2 checks, plus FIX4 regression tests.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102110-AQ5BD6",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX4 implementation plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:10:56.144Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "FIX4 core hardening shipped",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX4 state commit and anti-bypass hardening",
+      "verification": {
+        "note": "Verified: FIX4 implemented. Full test suite passes (22/22) and smoke simulation shows projection_fact_ids, nonzero refs from step2, and anchor growth diagnostics.",
+        "state": "ok",
+        "updated_at": "2026-02-10T21:11:19.967Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Start: Audit completed FIX4 implementation task, record evidence, and close tracking with commit traceability."
+        },
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Verified: FIX4 plan executed end-to-end with code, tests, smoke validation, and regression evidence."
+        }
+      ],
+      "commit": {
+        "hash": "3ef07aef69b657d8ce152a581f11a776bb8bfb0d",
+        "message": "✅ AQ5BD6 backend: implement FIX4 state-evolution and anti-bypass hardening"
+      },
+      "depends_on": [
+        "202602102110-AQ5BD6"
+      ],
+      "description": "Track FIX4 implementation: enforce real state commits, remove relaxation bypass, and tighten refs/state diagnostics.",
+      "dirty": false,
+      "doc": "## Summary\n\nImplement FIX4 improvements from sow/FIX4.txt with auditable verification.\n\n## Scope\n\nIn-scope: orchestrator, verifiers, provers, simulation CLI, config, tests, docs.\n\n## Plan\n\n1. Enforce state-commit invariants and remove acceptance bypass.\n2. Propagate prior fact ids into projection and references contract.\n3. Tighten verifier refs gate from step 2.\n4. Add diagnostics and regression tests.\n5. Run pytest and smoke simulation.\n\n## Risks\n\nRisk: stricter gating may reduce accept-rate; mitigated by deterministic escape mode rather than threshold relaxation.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-10T21:12:06.892Z — VERIFY — ok\n\nBy: ORCHESTRATOR\n\nNote: Verified: FIX4 implementation task is DONE, tests pass (22/22), and smoke run confirms state-evolution diagnostics and refs propagation behavior.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-10T21:11:57.171Z, excerpt_hash=sha256:fc1ac6f3a47436f8c7fdfc569f3cbe1e9375e4f2533948d1186861a22954b809\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert FIX4 commit if regressions are detected, then re-run test suite.\n\n## Context\n\nFix4 identifies state-evolution bugs (anchor growth/refs), metric inconsistency, and acceptance bypass risk.\n\n## Verify Steps\n\n1. python -m pytest tests -q\n2. python scripts/run_simulation.py --steps 8 --db data/fix4_smoke.db --seed 10\n3. Confirm projection_fact_ids, fact refs, and anchor growth appear in log.\n\n## Notes\n\n### Approvals / Overrides\nNo overrides.\n\n### Decisions\nUse hard progression constraints; do not relax acceptance thresholds.\n\n### Implementation Notes\nTo be filled at finish.\n\n### Evidence / Links\nTo be filled at verify/finish.",
+      "doc_updated_at": "2026-02-10T21:12:15.827Z",
+      "doc_updated_by": "ORCHESTRATOR",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-10T21:11:57.171Z",
+          "author": "ORCHESTRATOR",
+          "from": "TODO",
+          "note": "Start: Audit completed FIX4 implementation task, record evidence, and close tracking with commit traceability.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-10T21:12:06.892Z",
+          "author": "ORCHESTRATOR",
+          "note": "Verified: FIX4 implementation task is DONE, tests pass (22/22), and smoke run confirms state-evolution diagnostics and refs propagation behavior.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-10T21:12:15.827Z",
+          "author": "ORCHESTRATOR",
+          "from": "DOING",
+          "note": "Verified: FIX4 plan executed end-to-end with code, tests, smoke validation, and regression evidence.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602102110-ZVRRQT",
+      "id_source": "generated",
+      "owner": "ORCHESTRATOR",
+      "plan_approval": {
+        "note": "Approved FIX4 tracking plan.",
+        "state": "approved",
+        "updated_at": "2026-02-10T21:10:56.132Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "FIX4 tracking closed",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "PoCWC FIX4 state-evolution and gate hardening tracking",
+      "verification": {
+        "note": "Verified: FIX4 implementation task is DONE, tests pass (22/22), and smoke run confirms state-evolution diagnostics and refs propagation behavior.",
+        "state": "ok",
+        "updated_at": "2026-02-10T21:12:06.892Z",
+        "updated_by": "ORCHESTRATOR"
       },
       "verify": []
     }
