@@ -1,7 +1,8 @@
 ---
 id: "202602100053-HFPMXD"
 title: "Implement genesis snapshot API and CLI rendering"
-status: "DOING"
+result_summary: "Genesis startup rendering added"
+status: "DONE"
 priority: "med"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T00:54:54.537Z"
   updated_by: "TESTER"
   note: "Smoke run with PYTHONPATH=src and --steps 1 prints Genesis World State block before step stream with branch/state/height, baseline metrics, scene, and deferred tension."
-commit: null
+commit:
+  hash: "1cb2a114def2b0727c5869de50d0483123e42f3a"
+  message: "✅ HFPMXD backend: render genesis world state at startup"
 comments:
   -
     author: "CODER"
     body: "Start: adding genesis snapshot accessor and startup Genesis World State rendering in run_simulation CLI output."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: SimulationEngine now exposes genesis snapshot and CLI prints a formatted Genesis World State block before step streaming."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Smoke run with PYTHONPATH=src and --steps 1 prints Genesis World State block before step stream with branch/state/height, baseline metrics, scene, and deferred tension."
+  -
+    type: "status"
+    at: "2026-02-10T00:55:41.612Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: SimulationEngine now exposes genesis snapshot and CLI prints a formatted Genesis World State block before step streaming."
 doc_version: 2
-doc_updated_at: "2026-02-10T00:54:54.538Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T00:55:41.612Z"
+doc_updated_by: "INTEGRATOR"
 description: "Expose genesis snapshot from orchestrator and print a formatted Genesis World State section at simulation startup."
 id_source: "generated"
 ---
