@@ -66,6 +66,9 @@ class DifficultyController:
         if metrics.stability_score < 0.45:
             nb -= 0.06
             cd -= 0.04
+        if metrics.novelty_score < 0.45:
+            nb += 0.12
+            ul += 0.08
 
         next_difficulty = Difficulty(
             dependency_depth=max(1, min(8, int(dd))),
@@ -79,18 +82,22 @@ class DifficultyController:
         mode = state.mode
         if debt_high and metrics.stability_score < 0.50:
             mode = "maintenance"
-        elif debt_low and metrics.accept_rate > 0.70:
+        elif debt_low and metrics.accept_rate > 0.88 and metrics.validator_variance < 0.03:
             mode = "false-convergence"
         elif metrics.fork_rate > 0.40:
             mode = "consolidate"
+        elif metrics.novelty_score < 0.55 or metrics.accept_rate > 0.75:
+            mode = "diversify"
         else:
             mode = "diversify"
 
         theta = state.theta
-        if metrics.accept_rate > 0.85:
-            theta += 0.02
+        if metrics.accept_rate > 0.90:
+            theta += 0.015
         elif metrics.accept_rate < 0.45:
             theta -= 0.02
+        if mode == "diversify":
+            theta -= 0.01
 
         theta = self._clip(theta, 0.50, 0.70)
 

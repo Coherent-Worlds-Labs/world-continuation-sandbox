@@ -65,6 +65,7 @@ def _render_progress(update: dict) -> None:
     artifact = str(update.get("artifact") or "")
     candidate_artifact = str(update.get("candidate_artifact") or "")
     candidate_score = update.get("candidate_score")
+    step_similarity = float(update.get("step_similarity") or 0.0)
     decision_reasons = update.get("decision_reasons") or []
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
@@ -84,7 +85,8 @@ def _render_progress(update: dict) -> None:
     )
     print(
         f"{_style('world:', f'debt={debt:.3f}  variance={variance:.4f}  forks={forks}', color='32')} "
-        f"{_style('ledger:', f'accepted={accepted} rejected={rejected}', color='32')}"
+        f"{_style('ledger:', f'accepted={accepted} rejected={rejected}', color='32')} "
+        f"{_style('step_similarity:', f'{step_similarity:.3f}', color='34')}"
     )
     print(_style("narrative:", narrative if narrative else "(no narrative available)", color="36"))
     if candidate_preview:
@@ -101,7 +103,8 @@ def _render_progress(update: dict) -> None:
                     "trace:",
                     (
                         f"{trace.get('prover_id')} "
-                        f"verdict={trace.get('verdict')} score={trace.get('score')} "
+                        f"verdict={trace.get('verdict')} score={trace.get('score')} raw={trace.get('raw_score')} "
+                        f"sim={trace.get('similarity')} penalty={trace.get('penalty')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),
@@ -122,8 +125,8 @@ def main() -> None:
     parser.add_argument("--llm-provider", default=None, help="LLM provider (none|openrouter)")
     parser.add_argument("--llm-model", default=None, help="LLM model id for provider")
     parser.add_argument("--llm-base-url", default=None, help="Override provider base URL")
-    parser.add_argument("--llm-temperature", type=float, default=0.35, help="LLM sampling temperature")
-    parser.add_argument("--llm-top-p", type=float, default=1.0, help="LLM nucleus sampling top-p")
+    parser.add_argument("--llm-temperature", type=float, default=0.75, help="LLM sampling temperature")
+    parser.add_argument("--llm-top-p", type=float, default=0.92, help="LLM nucleus sampling top-p")
     parser.add_argument("--story-language", default="english", help="Requested story generation language")
     args = parser.parse_args()
 

@@ -42,6 +42,26 @@ class SimulationTests(unittest.TestCase):
         self.assertIsNotNone(epoch)
         self.assertIn(epoch["mode"], {"diversify", "consolidate", "maintenance", "false-convergence", "deferred-tension"})
 
+    def test_progress_reports_similarity_and_trace_penalties(self) -> None:
+        db = Path("data/test_world_similarity_metrics.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=4, seed=13))
+        updates: list[dict] = []
+        engine.run(4, progress_callback=updates.append)
+
+        self.assertGreaterEqual(len(updates), 1)
+        for update in updates:
+            self.assertIn("step_similarity", update)
+            self.assertIn("candidate_traces", update)
+            self.assertGreaterEqual(float(update["step_similarity"]), 0.0)
+            self.assertLessEqual(float(update["step_similarity"]), 1.0)
+            traces = update["candidate_traces"]
+            self.assertGreaterEqual(len(traces), 1)
+            for trace in traces:
+                self.assertIn("similarity", trace)
+                self.assertIn("penalty", trace)
+
 
 if __name__ == "__main__":
     unittest.main()

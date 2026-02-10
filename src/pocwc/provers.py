@@ -36,7 +36,7 @@ class Prover:
         total = sum(base_strength.values())
         strengths = {k: round(v / total, 3) for k, v in base_strength.items()}
 
-        bundle = self._fallback_bundle(strengths)
+        bundle = self._fallback_bundle(challenge, strengths)
         artifact = self._bundle_to_artifact(bundle)
         meta = self._bundle_to_meta(bundle, strengths)
         meta["story_language_requested"] = self.story_language
@@ -77,13 +77,25 @@ class Prover:
             meta_m=meta,
         )
 
-    @staticmethod
-    def _fallback_bundle(strengths: dict[str, float]) -> dict[str, Any]:
+    def _fallback_bundle(self, challenge: Challenge, strengths: dict[str, float]) -> dict[str, Any]:
         strongest = max(strengths, key=strengths.get)
+        scene_templates = [
+            "Alice notices another discrepancy in records that should have remained stable.",
+            "Alice observes a new contradiction between witness logs and municipal archives.",
+            "Alice receives a field report that conflicts with the official timeline.",
+            "Alice traces a fresh mismatch across two agencies that should share the same source data.",
+        ]
+        event_templates = [
+            "A courier delivers an annotated map from the old transit office at dawn.",
+            "A maintenance team finds a sealed container near the river checkpoint at midnight.",
+            "A council aide releases a timestamped memo from the northern district archive.",
+            "A volunteer scanner uncovers a mislabeled evidence card in the central depot.",
+        ]
+        scene = f"{self.rng.choice(scene_templates)} {self.rng.choice(event_templates)}"
         return {
             "scene": (
-                "Alice notices another discrepancy in records that should have remained stable. "
-                "Witnesses agree on the event itself but differ on where and when the key artifact was discovered."
+                f"{scene} Witnesses agree on the event itself but differ on where and when the key artifact was discovered. "
+                f"Directive pressure: {challenge.directive_type}."
             ),
             "surface_confirmation": (
                 f"The immediate public reaction frames the discrepancy as confirmation of interpretation {strongest}."
@@ -161,13 +173,17 @@ class Prover:
             f"Projection: {challenge.projection}\n"
             f"Interpretation strengths seed: {strengths}\n"
             f"Language requirement: produce all narrative text in {self.story_language}.\n"
-            "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure."
+            "Constraints: preserve at least two plausible alternatives and increase semantic tension without closure.\n"
+            "Must include one concrete new event for this step (actor + action + place/time cue), and avoid reusing the exact previous scene wording."
         )
+        temp = self.llm_temperature + max(0.0, challenge.difficulty.novelty_budget - 0.5) * 0.4
+        if challenge.directive_type in {"IntroduceAmbiguousFact", "AgentActionDivergence", "DelayedEffect"}:
+            temp += 0.08
         try:
             payload = self.llm.generate_json(
                 system_prompt=system,
                 user_prompt=prompt,
-                temperature=self.llm_temperature,
+                temperature=max(0.0, min(1.2, temp)),
                 top_p=self.llm_top_p,
                 max_tokens=1000,
             )

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,8 +29,8 @@ class SimulationConfig:
     llm_provider: str | None = None
     llm_model: str | None = None
     llm_base_url: str | None = None
-    llm_temperature: float = 0.35
-    llm_top_p: float = 1.0
+    llm_temperature: float = 0.55
+    llm_top_p: float = 0.92
     story_language: str = "english"
 
 
@@ -79,6 +80,29 @@ class SimulationEngine:
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _tokenize(text: str) -> set[str]:
+        return set(re.findall(r"[a-zA-Zа-яА-Я0-9]+", text.lower()))
+
+    @classmethod
+    def _text_similarity(cls, a: str, b: str) -> float:
+        aa = cls._tokenize(a)
+        bb = cls._tokenize(b)
+        if not aa or not bb:
+            return 0.0
+        return len(aa.intersection(bb)) / max(1, len(aa.union(bb)))
+
+    def _recent_branch_narratives(self, branch_id: str, limit: int = 5) -> list[str]:
+        states = self.store.list_states(branch_id=branch_id)
+        recent = states[-limit:]
+        narratives: list[str] = []
+        for state in recent:
+            bundle = state.get("meta_m", {}).get("story_bundle", {})
+            scene = str(bundle.get("scene", "")).strip()
+            artifact = str(state.get("artifact_x", "")).strip()
+            narratives.append(scene or artifact)
+        return narratives
 
     def get_genesis_snapshot(self) -> dict[str, Any]:
         self._seed_genesis()
@@ -233,7 +257,11 @@ class SimulationEngine:
         artifacts = [s["artifact_x"] for s in states]
         signals = self._branch_signals(branch)
         directive = self.taskgen.pick_directive(signals, self.controller_state.mode)
-        difficulty = self.taskgen.build_difficulty(self.controller_state.difficulty, signals)
+        difficulty = self.taskgen.build_difficulty(
+            self.controller_state.difficulty,
+            signals,
+            self.controller_state.mode,
+        )
         projection = self.projection.build(artifacts, difficulty.dependency_depth)
         story_memory = self.store.get_story_memory(branch["branch_id"])
         if story_memory:
@@ -470,6 +498,7 @@ class SimulationEngine:
         total_steps = steps or self.config.steps
         existing_challenges = len(self.store.list_challenges())
         reject_streak = 0
+        previous_progress_narrative = ""
 
         for offset in range(1, total_steps + 1):
             step = existing_challenges + offset
@@ -488,6 +517,7 @@ class SimulationEngine:
             best_any_reasons: list[str] = []
             accepted_via_retry = False
             candidate_traces: list[dict[str, Any]] = []
+            recent_narratives = self._recent_branch_narratives(branch["branch_id"], limit=6)
 
             for index, prover in enumerate(self.provers, start=1):
                 candidate = prover.generate(challenge, index)
@@ -503,29 +533,49 @@ class SimulationEngine:
                     }
                 )
                 verdict, score, signals, levels, reasons = self._evaluate_candidate(challenge, candidate)
+                candidate_scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
+                candidate_text = candidate_scene or candidate.artifact_x
+                max_similarity = 0.0
+                if recent_narratives:
+                    max_similarity = max(self._text_similarity(candidate_text, prev) for prev in recent_narratives)
+                novelty_penalty = max(0.0, (max_similarity - 0.62) * 0.35)
+                adjusted_score = max(0.0, score - novelty_penalty)
+                adjusted_verdict = verdict
+                adjusted_reasons = list(reasons)
+                if novelty_penalty > 0:
+                    adjusted_reasons.append(
+                        f"Repetition penalty applied (similarity={max_similarity:.2f}, penalty={novelty_penalty:.3f})"
+                    )
+                if adjusted_verdict == Verdict.ACCEPT and adjusted_score < self.aggregator.accept_threshold:
+                    adjusted_verdict = Verdict.REJECT
+                    adjusted_reasons.append("Repetition penalty lowered confidence below acceptance threshold")
+
                 candidate_traces.append(
                     {
                         "prover_id": candidate.prover_id,
                         "candidate_id": candidate.candidate_id,
-                        "score": round(score, 3),
-                        "verdict": verdict.value,
+                        "score": round(adjusted_score, 3),
+                        "raw_score": round(score, 3),
+                        "similarity": round(max_similarity, 3),
+                        "penalty": round(novelty_penalty, 3),
+                        "verdict": adjusted_verdict.value,
                         "llm_used": bool(candidate.meta_m.get("llm_used", False)),
                         "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
                         "llm_error": str(candidate.meta_m.get("llm_error", "")),
                     }
                 )
-                if score > best_any_score:
+                if adjusted_score > best_any_score:
                     best_any_candidate = candidate
-                    best_any_score = score
+                    best_any_score = adjusted_score
                     best_any_meta = signals
                     best_any_levels = levels
-                    best_any_reasons = reasons
-                if verdict == Verdict.ACCEPT and score > best_score:
+                    best_any_reasons = adjusted_reasons
+                if adjusted_verdict == Verdict.ACCEPT and adjusted_score > best_score:
                     accepted_candidate = candidate
-                    best_score = score
+                    best_score = adjusted_score
                     best_meta = signals
                     best_levels = levels
-                self.store.update_candidate_status(candidate.candidate_id, verdict.value)
+                self.store.update_candidate_status(candidate.candidate_id, adjusted_verdict.value)
 
             if accepted_candidate is not None:
                 self._accept_candidate(challenge, accepted_candidate, best_score, best_meta, best_levels)
@@ -579,6 +629,9 @@ class SimulationEngine:
                 head_node = self.store.get_state(head_id) if head_id else None
                 artifact = head_node["artifact_x"] if head_node else ""
                 story_bundle = (head_node or {}).get("meta_m", {}).get("story_bundle", {}) if head_node else {}
+                current_narrative = str(story_bundle.get("scene", "") or artifact)
+                step_similarity = self._text_similarity(previous_progress_narrative, current_narrative)
+                previous_progress_narrative = current_narrative
                 candidate_artifact = best_any_candidate.artifact_x if best_any_candidate is not None else ""
                 progress_callback(
                     {
@@ -595,6 +648,7 @@ class SimulationEngine:
                         "artifact": artifact,
                         "candidate_artifact": candidate_artifact,
                         "candidate_score": round(best_any_score, 3) if best_any_score >= 0 else None,
+                        "step_similarity": round(step_similarity, 3),
                         "decision_reasons": best_any_reasons,
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
