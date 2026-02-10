@@ -4,7 +4,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .aggregation import Aggregator
 from .controller import ControllerMetrics, ControllerState, DifficultyController
@@ -409,7 +409,7 @@ class SimulationEngine:
         )
         self.runtime.forks_created += 1
 
-    def run(self, steps: int | None = None) -> dict[str, Any]:
+    def run(self, steps: int | None = None, progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
         self._seed_genesis()
         total_steps = steps or self.config.steps
         existing_challenges = len(self.store.list_challenges())
@@ -481,6 +481,30 @@ class SimulationEngine:
             )
             self.controller_state = self.controller.update(step, self.controller_state, cm)
             self._record_controller_epoch(step, {**metrics, "debt_trend": cm.debt_trend, "stability": cm.stability_score})
+
+            if progress_callback is not None:
+                head_state = self.store.get_branch(branch["branch_id"])
+                head_id = head_state["head_state_id"] if head_state else None
+                head_node = self.store.get_state(head_id) if head_id else None
+                artifact = head_node["artifact_x"] if head_node else ""
+                story_bundle = (head_node or {}).get("meta_m", {}).get("story_bundle", {}) if head_node else {}
+                progress_callback(
+                    {
+                        "step": step,
+                        "total_steps": total_steps,
+                        "branch_id": branch["branch_id"],
+                        "accepted": self.runtime.accepted_candidates,
+                        "rejected": self.runtime.rejected_candidates,
+                        "forks": self.runtime.forks_created,
+                        "debt": metrics["semantic_debt_est"],
+                        "variance": metrics["validator_variance"],
+                        "mode": self.controller_state.mode,
+                        "theta": self.controller_state.theta,
+                        "artifact": artifact,
+                        "scene": story_bundle.get("scene", ""),
+                        "deferred_tension": story_bundle.get("deferred_tension", ""),
+                    }
+                )
 
         final_metrics = compute_metrics(self.store.list_branches(), self.store.list_verification_results(), self.runtime)
         final_metrics["controller"] = {
