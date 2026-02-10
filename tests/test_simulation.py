@@ -55,6 +55,10 @@ class SimulationTests(unittest.TestCase):
         for update in updates:
             self.assertIn("step_similarity", update)
             self.assertIn("candidate_traces", update)
+            self.assertIn("new_fact_count", update)
+            self.assertIn("novel_fact_ratio", update)
+            self.assertIn("semantic_delta_score", update)
+            self.assertIn("stagnation_streak", update)
             self.assertGreaterEqual(float(update["step_similarity"]), 0.0)
             self.assertLessEqual(float(update["step_similarity"]), 1.0)
             traces = update["candidate_traces"]
@@ -62,6 +66,17 @@ class SimulationTests(unittest.TestCase):
             for trace in traces:
                 self.assertIn("similarity", trace)
                 self.assertIn("penalty", trace)
+                self.assertIn("new_fact_count", trace)
+                self.assertIn("novelty_score", trace)
+
+    def test_branch_fact_registry_populates(self) -> None:
+        db = Path("data/test_world_fact_registry.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=3, seed=12))
+        engine.run(3)
+        facts = engine.store.list_branch_facts("branch-main", limit=50)
+        self.assertGreaterEqual(len(facts), 1)
 
     def test_custom_world_config_overrides_genesis(self) -> None:
         db = Path("data/test_world_custom_config.db")

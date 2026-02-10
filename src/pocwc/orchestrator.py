@@ -2,6 +2,7 @@
 
 import random
 import re
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from .store import WorldStore
 from .taskgen import BranchSignals, TaskGenerator
 from .verifiers import default_verifiers
 from .world_config import DEFAULT_WORLD_CONFIG_PATH, load_world_config
+from .semantic import semantic_similarity
 
 
 @dataclass(slots=True)
@@ -51,6 +53,7 @@ class SimulationEngine:
             base_url_override=config.llm_base_url,
         )
         llm_adapter = create_llm_adapter(llm_settings)
+        self.llm_adapter = llm_adapter
         if llm_adapter is not None:
             llm_reason = "ready"
         elif llm_settings.provider == "none":
@@ -81,6 +84,7 @@ class SimulationEngine:
         self.controller_state = ControllerState(difficulty=Difficulty())
         self.runtime = RuntimeStats()
         self.debt_history: list[float] = []
+        self.stagnation_streak = 0
 
     @staticmethod
     def _now() -> str:
@@ -98,6 +102,9 @@ class SimulationEngine:
             return 0.0
         return len(aa.intersection(bb)) / max(1, len(aa.union(bb)))
 
+    def _semantic_similarity(self, a: str, b: str) -> float:
+        return semantic_similarity(a, b, self.llm_adapter)
+
     def _recent_branch_narratives(self, branch_id: str, limit: int = 5) -> list[str]:
         states = self.store.list_states(branch_id=branch_id)
         recent = states[-limit:]
@@ -108,6 +115,25 @@ class SimulationEngine:
             artifact = str(state.get("artifact_x", "")).strip()
             narratives.append(scene or artifact)
         return narratives
+
+    @staticmethod
+    def _fact_text(fact: dict[str, Any]) -> str:
+        return " | ".join(
+            [
+                str(fact.get("subject", "")),
+                str(fact.get("predicate", "")),
+                str(fact.get("object", "")),
+                str(fact.get("time_hint", "")),
+                str(fact.get("location_hint", "")),
+            ]
+        ).strip()
+
+    @staticmethod
+    def _fact_hash(text: str) -> str:
+        return hashlib.sha1(" ".join(text.lower().split()).encode("utf-8")).hexdigest()
+
+    def _recent_branch_facts(self, branch_id: str, limit: int = 120) -> list[dict[str, Any]]:
+        return self.store.list_branch_facts(branch_id, limit=limit)
 
     def get_genesis_snapshot(self) -> dict[str, Any]:
         self._seed_genesis()
@@ -280,8 +306,12 @@ class SimulationEngine:
     def _build_challenge(self, step: int, branch: dict[str, Any]) -> Challenge:
         states = self.store.list_states(branch_id=branch["branch_id"])
         artifacts = [s["artifact_x"] for s in states]
+        recent_narratives = self._recent_branch_narratives(branch["branch_id"], limit=6)
+        recent_facts = self._recent_branch_facts(branch["branch_id"], limit=160)
         signals = self._branch_signals(branch)
         directive = self.taskgen.pick_directive(signals, self.controller_state.mode)
+        if self.stagnation_streak >= 2:
+            directive = self.rng.choice(["IntroduceAmbiguousFact", "AgentActionDivergence", "DelayedEffect"])
         difficulty = self.taskgen.build_difficulty(
             self.controller_state.difficulty,
             signals,
@@ -294,6 +324,11 @@ class SimulationEngine:
                 f"{projection}\n\nStory continuity summary:\n{story_memory.get('summary', '')}\n"
                 f"Unresolved tensions: {', '.join(story_memory.get('continuity', {}).get('unresolved_tensions', []))}"
             )
+        if recent_facts:
+            projection = (
+                f"{projection}\n\nRecent branch facts (avoid rephrasing these as new):\n"
+                + "\n".join(f"- {str(f.get('fact_text', ''))}" for f in recent_facts[:8])
+            )
         cid = f"challenge-{step:04d}-{branch['branch_id']}"
 
         challenge = Challenge(
@@ -303,7 +338,13 @@ class SimulationEngine:
             projection=projection,
             directive_type=directive,
             difficulty=difficulty,
-            verifier_policy={"theta": self.controller_state.theta, "cascade": "L0-L3"},
+            verifier_policy={
+                "theta": self.controller_state.theta,
+                "cascade": "L0-L3",
+                "recent_narratives": recent_narratives,
+                "recent_fact_texts": [str(f.get("fact_text", "")) for f in recent_facts],
+                "stagnation_streak": self.stagnation_streak,
+            },
         )
 
         self.store.insert_challenge(
@@ -324,6 +365,8 @@ class SimulationEngine:
         self,
         challenge: Challenge,
         candidate,
+        *,
+        repetition_penalty: float = 0.0,
     ) -> tuple[Verdict, float, dict[str, Any], dict[str, int], list[str]]:
         results = [v.evaluate(challenge, candidate, allow_l3=True) for v in self.verifiers]
         for result in results:
@@ -339,12 +382,27 @@ class SimulationEngine:
                     "created_at": self._now(),
                 }
             )
-        decision = self.aggregator.decide(results)
+        novelty_scores = [float(r.signals.get("novelty_score", r.score)) for r in results]
+        tension_scores = [float(r.signals.get("tension_progress", 0.5)) for r in results]
+        hard_fail = any("Novelty gate failed" in (r.notes or "") for r in results)
+        decision = self.aggregator.decide(
+            results,
+            novelty_score=sum(novelty_scores) / max(1, len(novelty_scores)),
+            tension_progress=sum(tension_scores) / max(1, len(tension_scores)),
+            repetition_penalty=repetition_penalty,
+            hard_fail=hard_fail,
+        )
 
         signal_means = {
             "closure_risk": round(sum(r.signals["closure_risk"] for r in results) / len(results), 3),
             "chaos_risk": round(sum(r.signals["chaos_risk"] for r in results) / len(results), 3),
             "fragility_score": round(sum(r.signals["fragility_score"] for r in results) / len(results), 3),
+            "novelty_score": round(sum(novelty_scores) / max(1, len(novelty_scores)), 3),
+            "tension_progress": round(sum(tension_scores) / max(1, len(tension_scores)), 3),
+            "new_fact_count": round(
+                sum(float(r.signals.get("new_fact_count", 0.0)) for r in results) / max(1, len(results)),
+                3,
+            ),
         }
         return decision.verdict, decision.score, signal_means, decision.level_counts, decision.reasons
 
@@ -408,8 +466,36 @@ class SimulationEngine:
             height=state_height,
             story_bundle=candidate.meta_m.get("story_bundle", {}),
         )
+        self._record_branch_facts(branch_id=branch_id, state_id=state_id, facts=candidate.meta_m.get("novel_facts", []))
 
         self.runtime.accepted_candidates += 1
+
+    def _record_branch_facts(self, *, branch_id: str, state_id: str, facts: Any) -> None:
+        if not isinstance(facts, list):
+            return
+        for index, item in enumerate(facts):
+            if not isinstance(item, dict):
+                continue
+            fact_text = self._fact_text(item)
+            if not fact_text:
+                continue
+            self.store.insert_branch_fact(
+                {
+                    "branch_id": branch_id,
+                    "state_id": state_id,
+                    "fact_id": str(item.get("fact_id", f"{state_id}-fact-{index+1}")),
+                    "subject": str(item.get("subject", "")),
+                    "predicate": str(item.get("predicate", "")),
+                    "object": str(item.get("object", "")),
+                    "time_hint": str(item.get("time_hint", "")),
+                    "location_hint": str(item.get("location_hint", "")),
+                    "evidence_type": str(item.get("evidence_type", "")),
+                    "falsifiable": 1 if bool(item.get("falsifiable", True)) else 0,
+                    "fact_text": fact_text,
+                    "fact_hash": self._fact_hash(fact_text),
+                    "created_at": self._now(),
+                }
+            )
 
     def _update_story_continuity(self, *, branch_id: str, state_id: str, height: int, story_bundle: dict[str, Any]) -> None:
         memory = self.store.get_story_memory(branch_id)
@@ -566,23 +652,24 @@ class SimulationEngine:
                         "created_at": self._now(),
                     }
                 )
-                verdict, score, signals, levels, reasons = self._evaluate_candidate(challenge, candidate)
                 candidate_scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
                 candidate_text = candidate_scene or candidate.artifact_x
                 max_similarity = 0.0
                 if recent_narratives:
-                    max_similarity = max(self._text_similarity(candidate_text, prev) for prev in recent_narratives)
+                    max_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
                 novelty_penalty = max(0.0, (max_similarity - 0.62) * 0.35)
-                adjusted_score = max(0.0, score - novelty_penalty)
+                verdict, score, signals, levels, reasons = self._evaluate_candidate(
+                    challenge,
+                    candidate,
+                    repetition_penalty=novelty_penalty,
+                )
+                adjusted_score = score
                 adjusted_verdict = verdict
                 adjusted_reasons = list(reasons)
                 if novelty_penalty > 0:
                     adjusted_reasons.append(
                         f"Repetition penalty applied (similarity={max_similarity:.2f}, penalty={novelty_penalty:.3f})"
                     )
-                if adjusted_verdict == Verdict.ACCEPT and adjusted_score < self.aggregator.accept_threshold:
-                    adjusted_verdict = Verdict.REJECT
-                    adjusted_reasons.append("Repetition penalty lowered confidence below acceptance threshold")
 
                 candidate_traces.append(
                     {
@@ -592,6 +679,9 @@ class SimulationEngine:
                         "raw_score": round(score, 3),
                         "similarity": round(max_similarity, 3),
                         "penalty": round(novelty_penalty, 3),
+                        "new_fact_count": signals.get("new_fact_count", 0.0),
+                        "novelty_score": signals.get("novelty_score", 0.0),
+                        "tension_progress": signals.get("tension_progress", 0.0),
                         "verdict": adjusted_verdict.value,
                         "llm_used": bool(candidate.meta_m.get("llm_used", False)),
                         "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
@@ -615,9 +705,14 @@ class SimulationEngine:
                 self._accept_candidate(challenge, accepted_candidate, best_score, best_meta, best_levels)
                 self._maybe_create_fork(challenge, accepted_candidate)
                 reject_streak = 0
+                if float(best_meta.get("novelty_score", 0.0)) < 0.45:
+                    self.stagnation_streak += 1
+                else:
+                    self.stagnation_streak = 0
             else:
                 self.runtime.rejected_candidates += 1
                 reject_streak += 1
+                self.stagnation_streak += 1
                 # Adaptive retry: after consecutive rejects, accept the strongest candidate near threshold.
                 adaptive_threshold = max(0.45, self.controller_state.theta - 0.08)
                 if best_any_candidate is not None and reject_streak >= 2 and best_any_score >= adaptive_threshold:
@@ -626,6 +721,7 @@ class SimulationEngine:
                     self.runtime.rejected_candidates = max(0, self.runtime.rejected_candidates - 1)
                     reject_streak = 0
                     accepted_via_retry = True
+                    self.stagnation_streak = max(0, self.stagnation_streak - 1)
                 stale = self.store.get_branch(branch["branch_id"])
                 if stale is not None:
                     self.store.upsert_branch(
@@ -651,7 +747,7 @@ class SimulationEngine:
                 validator_variance=metrics["validator_variance"],
                 debt_level=metrics["semantic_debt_est"],
                 debt_trend=debt_trend(self.debt_history),
-                novelty_score=0.5 + self.rng.uniform(-0.1, 0.1),
+                novelty_score=float(best_meta.get("novelty_score", 0.5)) if best_meta else 0.5,
                 stability_score=1.0 - min(1.0, metrics["validator_variance"] * 2.0),
             )
             self.controller_state = self.controller.update(step, self.controller_state, cm)
@@ -664,7 +760,7 @@ class SimulationEngine:
                 artifact = head_node["artifact_x"] if head_node else ""
                 story_bundle = (head_node or {}).get("meta_m", {}).get("story_bundle", {}) if head_node else {}
                 current_narrative = str(story_bundle.get("scene", "") or artifact)
-                step_similarity = self._text_similarity(previous_progress_narrative, current_narrative)
+                step_similarity = self._semantic_similarity(previous_progress_narrative, current_narrative)
                 previous_progress_narrative = current_narrative
                 candidate_artifact = best_any_candidate.artifact_x if best_any_candidate is not None else ""
                 progress_callback(
@@ -683,6 +779,13 @@ class SimulationEngine:
                         "candidate_artifact": candidate_artifact,
                         "candidate_score": round(best_any_score, 3) if best_any_score >= 0 else None,
                         "step_similarity": round(step_similarity, 3),
+                        "new_fact_count": round(float(best_any_meta.get("new_fact_count", 0.0)), 3),
+                        "novel_fact_ratio": round(
+                            min(1.0, float(best_any_meta.get("new_fact_count", 0.0)) / 2.0),
+                            3,
+                        ),
+                        "semantic_delta_score": round(float(best_any_meta.get("novelty_score", 0.0)), 3),
+                        "stagnation_streak": self.stagnation_streak,
                         "decision_reasons": best_any_reasons,
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,

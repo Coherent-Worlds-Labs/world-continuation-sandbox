@@ -66,6 +66,10 @@ def _render_progress(update: dict) -> None:
     candidate_artifact = str(update.get("candidate_artifact") or "")
     candidate_score = update.get("candidate_score")
     step_similarity = float(update.get("step_similarity") or 0.0)
+    new_fact_count = float(update.get("new_fact_count") or 0.0)
+    novel_fact_ratio = float(update.get("novel_fact_ratio") or 0.0)
+    semantic_delta_score = float(update.get("semantic_delta_score") or 0.0)
+    stagnation_streak = int(update.get("stagnation_streak") or 0)
     decision_reasons = update.get("decision_reasons") or []
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
@@ -88,6 +92,10 @@ def _render_progress(update: dict) -> None:
         f"{_style('ledger:', f'accepted={accepted} rejected={rejected}', color='32')} "
         f"{_style('step_similarity:', f'{step_similarity:.3f}', color='34')}"
     )
+    print(
+        f"{_style('novelty:', f'new_fact_count={new_fact_count:.1f}  novel_fact_ratio={novel_fact_ratio:.3f}  semantic_delta={semantic_delta_score:.3f}', color='92')} "
+        f"{_style('stagnation:', str(stagnation_streak), color='91')}"
+    )
     print(_style("narrative:", narrative if narrative else "(no narrative available)", color="36"))
     if candidate_preview:
         extra = f"score={candidate_score}" if candidate_score is not None else "score=n/a"
@@ -105,6 +113,7 @@ def _render_progress(update: dict) -> None:
                         f"{trace.get('prover_id')} "
                         f"verdict={trace.get('verdict')} score={trace.get('score')} raw={trace.get('raw_score')} "
                         f"sim={trace.get('similarity')} penalty={trace.get('penalty')} "
+                        f"new_facts={trace.get('new_fact_count')} novelty={trace.get('novelty_score')} tension_prog={trace.get('tension_progress')} "
                         f"llm_used={trace.get('llm_used')} source={trace.get('source')}"
                         + (f" error={trace.get('llm_error')}" if trace.get("llm_error") else "")
                     ),

@@ -108,6 +108,23 @@ class WorldStore:
                     deferred_tension TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS branch_facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id TEXT NOT NULL,
+                    state_id TEXT NOT NULL,
+                    fact_id TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT NOT NULL,
+                    time_hint TEXT NOT NULL,
+                    location_hint TEXT NOT NULL,
+                    evidence_type TEXT NOT NULL,
+                    falsifiable INTEGER NOT NULL,
+                    fact_text TEXT NOT NULL,
+                    fact_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -243,6 +260,31 @@ class WorldStore:
                     (cap,),
                 ).fetchall()
         return [self._decode_row(r, ("alternative_compatibility",)) for r in rows]
+
+    def insert_branch_fact(self, row: dict[str, Any]) -> None:
+        with closing(self._conn()) as conn:
+            conn.execute(
+                """
+                INSERT INTO branch_facts(
+                    branch_id, state_id, fact_id, subject, predicate, object, time_hint, location_hint,
+                    evidence_type, falsifiable, fact_text, fact_hash, created_at
+                )
+                VALUES(
+                    :branch_id, :state_id, :fact_id, :subject, :predicate, :object, :time_hint, :location_hint,
+                    :evidence_type, :falsifiable, :fact_text, :fact_hash, :created_at
+                )
+                """,
+                row,
+            )
+
+    def list_branch_facts(self, branch_id: str, limit: int = 200) -> list[dict[str, Any]]:
+        cap = max(1, min(limit, 5000))
+        with closing(self._conn()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM branch_facts WHERE branch_id=? ORDER BY id DESC LIMIT ?",
+                (branch_id, cap),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def _decode_row(self, row: sqlite3.Row, json_fields: tuple[str, ...]) -> dict[str, Any]:
         data = dict(row)

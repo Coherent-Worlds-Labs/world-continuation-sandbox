@@ -79,8 +79,14 @@ Runtime stream notes:
 
 - The CLI prints per-candidate traces with `llm_used=true|false`, source (`llm`, `llm_bundle_rebuilt`, or `fallback`), verdict, and score.
 - The stream also shows `step_similarity` and per-candidate novelty diagnostics (`sim`, `penalty`, `raw`, adjusted `score`) to make repetition visible.
+- The stream includes progression metrics: `new_fact_count`, `novel_fact_ratio`, `semantic_delta`, and `stagnation`.
 - Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
 - Diversify mode now pushes stronger novelty pressure: directives are biased toward non-maintenance events, prompt constraints require one concrete new event per step, and high overlap candidates receive a bounded repetition penalty.
+
+Novelty contract:
+
+- Candidate generation must provide structured `novel_facts` and explicit change annotations (`what_changed_since_previous_step`, `why_not_rephrase`).
+- A dedicated novelty gate verifier rejects candidates with insufficient new facts or low semantic delta, even when wording is coherent.
 
 ### 2. Run API + UI
 

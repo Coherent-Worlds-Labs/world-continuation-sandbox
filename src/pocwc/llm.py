@@ -20,6 +20,9 @@ class LLMAdapter(Protocol):
     ) -> dict[str, Any]:
         ...
 
+    def embed_texts(self, *, texts: list[str]) -> list[list[float]]:
+        ...
+
 
 @dataclass(slots=True)
 class LLMSettings:
@@ -30,6 +33,7 @@ class LLMSettings:
     app_name: str = "pocwc-prototype"
     site_url: str = "http://localhost"
     timeout_seconds: int = 30
+    embedding_model: str = ""
 
     @property
     def enabled(self) -> bool:
@@ -51,6 +55,7 @@ class LLMSettings:
         site_url = os.getenv("POCWC_SITE_URL", "http://localhost").strip() or "http://localhost"
         timeout_raw = os.getenv("POCWC_LLM_TIMEOUT", "30").strip()
         timeout_seconds = int(timeout_raw) if timeout_raw.isdigit() else 30
+        embedding_model = os.getenv("OPENROUTER_EMBED_MODEL", "").strip()
 
         if provider not in {"none", "openrouter"}:
             provider = "none"
@@ -63,6 +68,7 @@ class LLMSettings:
             app_name=app_name,
             site_url=site_url,
             timeout_seconds=max(5, min(timeout_seconds, 120)),
+            embedding_model=embedding_model,
         )
 
 
@@ -70,6 +76,7 @@ class OpenRouterAdapter:
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
         self.endpoint = f"{settings.base_url}/chat/completions"
+        self.embedding_endpoint = f"{settings.base_url}/embeddings"
 
     def generate_json(
         self,
@@ -116,6 +123,37 @@ class OpenRouterAdapter:
             return json.loads(content)
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError("OpenRouter response does not contain valid JSON content") from exc
+
+    def embed_texts(self, *, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        model = self.settings.embedding_model or self.settings.model
+        payload = {
+            "model": model,
+            "input": texts,
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = Request(
+            self.embedding_endpoint,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.settings.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": self.settings.site_url,
+                "X-Title": self.settings.app_name,
+            },
+        )
+        try:
+            with urlopen(req, timeout=self.settings.timeout_seconds) as resp:
+                response_payload = json.loads(resp.read().decode("utf-8"))
+            data = response_payload.get("data", [])
+            vectors = [list(item.get("embedding", [])) for item in data]
+            if len(vectors) != len(texts):
+                raise RuntimeError("Unexpected embedding response length")
+            return vectors
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"OpenRouter embedding request failed: {exc}") from exc
 
 
 def create_llm_adapter(settings: LLMSettings) -> LLMAdapter | None:

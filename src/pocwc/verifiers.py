@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from .domain import Candidate, Challenge, VerificationLevel, VerificationResult, Verdict
 from .invariants import evaluate_invariants
 from .llm import LLMAdapter
+from .semantic import semantic_similarity
 
 
 @dataclass(slots=True)
@@ -97,8 +98,108 @@ class Verifier:
             return None
 
 
-def default_verifiers(rng: random.Random, llm: LLMAdapter | None = None) -> list[Verifier]:
+@dataclass(slots=True)
+class NoveltyGateVerifier:
+    verifier_id: str
+    rng: random.Random
+    llm: LLMAdapter | None = None
+    min_new_facts: int = 2
+    min_novelty_score: float = 0.30
+
+    @staticmethod
+    def _fact_text(fact: dict) -> str:
+        return " | ".join(
+            [
+                str(fact.get("subject", "")),
+                str(fact.get("predicate", "")),
+                str(fact.get("object", "")),
+                str(fact.get("time_hint", "")),
+                str(fact.get("location_hint", "")),
+            ]
+        ).strip()
+
+    def evaluate(self, challenge: Challenge, candidate: Candidate, allow_l3: bool = False) -> VerificationResult:
+        recent_facts = list(challenge.verifier_policy.get("recent_fact_texts", []))
+        recent_narratives = list(challenge.verifier_policy.get("recent_narratives", []))
+        facts = candidate.meta_m.get("novel_facts", [])
+        if not isinstance(facts, list):
+            facts = []
+
+        unique_new = 0
+        for item in facts:
+            if not isinstance(item, dict):
+                continue
+            text = self._fact_text(item)
+            if not text:
+                continue
+            max_sim = max((semantic_similarity(text, prev, self.llm) for prev in recent_facts), default=0.0)
+            if max_sim < 0.82:
+                unique_new += 1
+
+        scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
+        semantic_delta = 1.0 - max((semantic_similarity(scene, prev, self.llm) for prev in recent_narratives), default=0.0)
+
+        llm_novelty = self._llm_novelty_estimate(challenge, candidate, recent_narratives)
+        novelty_score = llm_novelty if llm_novelty is not None else semantic_delta
+        tension_progress = float(candidate.meta_m.get("tension_progress", 0.5))
+
+        hard_fail = False
+        reasons: list[str] = []
+        if unique_new < self.min_new_facts:
+            hard_fail = True
+            reasons.append("Novelty gate failed: insufficient new structured facts")
+        if novelty_score < self.min_novelty_score:
+            hard_fail = True
+            reasons.append("Novelty gate failed: semantic delta below threshold")
+        if not str(candidate.meta_m.get("what_changed_since_previous_step", "")).strip():
+            hard_fail = True
+            reasons.append("Novelty gate failed: missing explicit change annotation")
+
+        verdict = Verdict.REJECT if hard_fail else Verdict.ACCEPT
+        score = max(0.0, min(1.0, novelty_score))
+        return VerificationResult(
+            candidate_id=candidate.candidate_id,
+            verifier_id=self.verifier_id,
+            level_max_reached=VerificationLevel.L2,
+            verdict=verdict,
+            score=round(score, 3),
+            signals={
+                "closure_risk": 0.45,
+                "chaos_risk": 0.45,
+                "fragility_score": round(max(0.0, 1.0 - novelty_score), 3),
+                "novelty_score": round(novelty_score, 3),
+                "new_fact_count": float(unique_new),
+                "tension_progress": round(tension_progress, 3),
+            },
+            notes="; ".join(reasons) if reasons else "novelty gate passed",
+        )
+
+    def _llm_novelty_estimate(
+        self,
+        challenge: Challenge,
+        candidate: Candidate,
+        recent_narratives: list[str],
+    ) -> float | None:
+        if self.llm is None:
+            return None
+        system = "You evaluate semantic novelty progression. Return JSON: {novelty_score: float 0..1}."
+        prompt = (
+            f"Directive: {challenge.directive_type}\n"
+            f"Recent narratives: {recent_narratives[-5:]}\n"
+            f"Candidate scene: {candidate.meta_m.get('story_bundle', {}).get('scene', '')}\n"
+            f"Candidate novel facts: {candidate.meta_m.get('novel_facts', [])}\n"
+            "Score novelty considering factual progression, not wording."
+        )
+        try:
+            payload = self.llm.generate_json(system_prompt=system, user_prompt=prompt, temperature=0.0, max_tokens=220)
+            return max(0.0, min(1.0, float(payload.get("novelty_score", 0.5))))
+        except Exception:  # noqa: BLE001
+            return None
+
+
+def default_verifiers(rng: random.Random, llm: LLMAdapter | None = None) -> list[object]:
     return [
+        NoveltyGateVerifier("verifier-novelty", rng, llm),
         Verifier("verifier-a", 0.95, rng, llm),
         Verifier("verifier-b", 1.00, rng, llm),
         Verifier("verifier-c", 1.05, rng, llm),
