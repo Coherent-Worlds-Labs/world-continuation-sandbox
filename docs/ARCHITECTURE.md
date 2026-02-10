@@ -15,6 +15,7 @@ The prototype is a single-process simulation system with SQLite persistence and 
 6. `SimulationEngine`: orchestrates branch selection, challenge flow, acceptance, retries, and forking.
 7. `DifficultyController`: epoch retarget mechanism over cognitive difficulty axes.
 8. `World Browser`: API routes + static frontend pages.
+9. `Narrative Continuity Memory`: branch-scoped summary plus per-state story events.
 
 ## Data Model
 
@@ -24,6 +25,8 @@ The prototype is a single-process simulation system with SQLite persistence and 
 - `candidates`: prover outputs and status.
 - `verification_results`: per-verifier cascade outputs.
 - `controller_epochs`: historical retarget snapshots.
+- `story_memory`: current continuity snapshot for each branch.
+- `story_events`: append-only timeline entries derived from accepted story bundles.
 
 ## Invariants
 
@@ -69,6 +72,13 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --llm-provider openrouter --llm-model openai/gpt-4o-mini
 ```
 
+Optional language control:
+
+```bash
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 20 --db data/world.db --seed 7 --story-language spanish
+```
+
 ### Run API/UI server
 
 ```bash
@@ -85,6 +95,8 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - `GET /api/challenges`
 - `GET /api/candidates/<candidate-id>`
 - `GET /api/metrics`
+- `GET /api/story/summary?branch_id=branch-main`
+- `GET /api/story?branch_id=branch-main&limit=200`
 
 ## Known Constraints
 

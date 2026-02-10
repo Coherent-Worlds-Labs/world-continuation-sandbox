@@ -15,6 +15,8 @@ The prototype implements:
 - Branch/fork world evolution with persistent state.
 - Difficulty controller with epoch retargeting.
 - API and web browser for inspecting branches, states, challenges, and candidates.
+- Narrative Continuity Memory with branch-scoped story summary and timeline events.
+- Story View in UI for reading the evolving Alice-world timeline.
 - Deterministic tests and a DoD-oriented validation harness.
 
 ## Project Structure
@@ -42,6 +44,13 @@ $env:PYTHONPATH="src"
 python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7
 ```
 
+Set requested story language:
+
+```bash
+$env:PYTHONPATH="src"
+python scripts/run_simulation.py --steps 50 --db data/world.db --seed 7 --story-language spanish
+```
+
 Optional LLM mode (OpenRouter):
 
 ```bash
@@ -60,6 +69,17 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 ```
 
 Open `http://127.0.0.1:8080`.
+
+Story View usage:
+
+- In the UI, open the `Story View` panel.
+- Keep `branch-main` (or enter another branch id).
+- Click `Load Story` to fetch continuity summary and timeline events.
+
+Story API endpoints:
+
+- `GET /api/story/summary?branch_id=branch-main`
+- `GET /api/story?branch_id=branch-main&limit=200`
 
 ### 3. Run tests
 
@@ -100,6 +120,7 @@ The runtime supports provider-agnostic LLM integration with a built-in OpenRoute
 - `POCWC_LLM_TIMEOUT`: optional timeout in seconds (default: `30`)
 
 If key/model/provider are incomplete, the system automatically falls back to deterministic non-LLM generation and verification.
+In deterministic fallback mode, language selection metadata is stored, while high-fidelity multilingual generation is available through the LLM path.
 
 ## License
 
