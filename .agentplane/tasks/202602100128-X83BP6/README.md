@@ -1,7 +1,8 @@
 ---
 id: "202602100128-X83BP6"
 title: "Increase narrative diversity and similarity observability"
-status: "DOING"
+result_summary: "Diversity package delivered"
+status: "DONE"
 priority: "high"
 owner: "CODER"
 depends_on: []
@@ -18,11 +19,16 @@ verification:
   updated_at: "2026-02-10T01:33:53.216Z"
   updated_by: "TESTER"
   note: "Unit tests pass (11). Smoke run shows step_similarity output plus per-candidate similarity/penalty traces, repetition penalty reasons, and diversify-friendly fallback variation with concrete event elements."
-commit: null
+commit:
+  hash: "08e0f7b9bab3e8cf9da46579a907a1ceedc6ce27"
+  message: "✅ X83BP6 backend: reduce repetition and add similarity telemetry"
 comments:
   -
     author: "CODER"
     body: "Start: implementing anti-repetition penalties, stronger diversify mode, concrete-event constraints, and step similarity telemetry."
+  -
+    author: "INTEGRATOR"
+    body: "Verified: implemented prompt-level new-event constraint, similarity-based repetition penalties, stronger diversify tuning in controller/taskgen, fallback variation for non-LLM runs, and step similarity telemetry in CLI output."
 events:
   -
     type: "status"
@@ -37,9 +43,16 @@ events:
     author: "TESTER"
     state: "ok"
     note: "Unit tests pass (11). Smoke run shows step_similarity output plus per-candidate similarity/penalty traces, repetition penalty reasons, and diversify-friendly fallback variation with concrete event elements."
+  -
+    type: "status"
+    at: "2026-02-10T01:34:24.327Z"
+    author: "INTEGRATOR"
+    from: "DOING"
+    to: "DONE"
+    note: "Verified: implemented prompt-level new-event constraint, similarity-based repetition penalties, stronger diversify tuning in controller/taskgen, fallback variation for non-LLM runs, and step similarity telemetry in CLI output."
 doc_version: 2
-doc_updated_at: "2026-02-10T01:33:53.218Z"
-doc_updated_by: "TESTER"
+doc_updated_at: "2026-02-10T01:34:24.327Z"
+doc_updated_by: "INTEGRATOR"
 description: "Implement anti-repetition penalties, stronger diversify behavior, richer generation constraints, and step-to-step similarity telemetry in CLI output."
 id_source: "generated"
 ---
