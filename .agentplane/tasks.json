@@ -1,6 +1,6 @@
 {
   "meta": {
-    "checksum": "d811e11f278d4b15b515e847ad93601ac78a0c823a41d9c1f27609b756e5b607",
+    "checksum": "410571d4bb2d3b8024bd92e7b7d4f1148422eb48a8cba14de8d0dd4f4d5cfbc0",
     "checksum_algo": "sha256",
     "managed_by": "agentplane",
     "schema_version": 1
@@ -5276,6 +5276,298 @@
         "state": "ok",
         "updated_at": "2026-02-11T12:19:12.155Z",
         "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Implementing strict fact_object schema validation and structured schema diagnostics integration."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: strict fact_object schema validation with field-level diagnostics is integrated into runtime verification flow."
+        }
+      ],
+      "commit": {
+        "hash": "f04b7dba28ccb3e56131f29e457b9f37258f3f81",
+        "message": "✅ 5PC685 backend: implement FIX8 strict fact schema and coercion diagnostics"
+      },
+      "depends_on": [],
+      "description": "Add strict fact_object validation contract and integrate it into verifier/orchestrator flow with explicit schema error details.",
+      "dirty": false,
+      "doc": "## Summary\n\nImplement strict fact_object schema validation and integrate into pipeline.\n\n## Scope\n\nIn scope: src/pocwc schema/validator integration in verifier/orchestrator/prover boundaries.\n\n## Plan\n\n1) Add strict fact_object validator module with typed contract and field checks. 2) Integrate validation before scoring gates. 3) Emit structured schema error details (path/expected/got).\n\n## Risks\n\nRisk: legacy payloads may fail hard. Mitigation: controlled coercion phase in dependent task.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:44:56.084Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: strict fact_object schema validator integrated with structured field-level errors and normalization in runtime checks.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:40:16.030Z, excerpt_hash=sha256:20286d93d5a1c2d5a1b0761796c257c0d0d4d2d62af83e43b9180fa88c289536\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert schema integration commit if incompatible with baseline behavior.\n\n## Context\n\nFIX8 identified schema drift (e.g., interpretation_affinity string instead of map) and weak error clarity.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q\n\n## Notes\n\n### Decisions`n- Validation output must be machine-readable and deterministic.",
+      "doc_updated_at": "2026-02-11T12:45:46.544Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:40:16.030Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Implementing strict fact_object schema validation and structured schema diagnostics integration.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:44:56.084Z",
+          "author": "CODER",
+          "note": "Verified: strict fact_object schema validator integrated with structured field-level errors and normalization in runtime checks.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:45:46.544Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: strict fact_object schema validation with field-level diagnostics is integrated into runtime verification flow.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111238-5PC685",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX8 schema plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:40:08.878Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX8 strict schema core.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX8 fact_object strict schema and validation",
+      "verification": {
+        "note": "Verified: strict fact_object schema validator integrated with structured field-level errors and normalization in runtime checks.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:44:56.084Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Implementing controlled coercion policy and expected_fact_type propagation for FIX8."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: controlled coercion policy and expected_fact_type wiring are active and reported in diagnostics."
+        }
+      ],
+      "commit": {
+        "hash": "f04b7dba28ccb3e56131f29e457b9f37258f3f81",
+        "message": "✅ 5PC685 backend: implement FIX8 strict fact schema and coercion diagnostics"
+      },
+      "depends_on": [],
+      "description": "Add controlled coercion policy for malformed fields and guarantee expected_fact_type propagation and enforcement.",
+      "dirty": false,
+      "doc": "## Summary\n\nImplement controlled coercion and expected_fact_type propagation.\n\n## Scope\n\nIn scope: progression policy wiring + coercion hooks + directive contract enforcement context.\n\n## Plan\n\n1) Add config flags for coercion behavior. 2) Coerce known malformed fields when enabled and log coercions. 3) Guarantee expected_fact_type is always set when contract exists.\n\n## Risks\n\nRisk: over-coercion can hide model errors. Mitigation: make coercion explicit and configurable.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:44:56.070Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: controlled coercion policy and expected_fact_type propagation are wired through challenge policy and diagnostics.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:40:16.176Z, excerpt_hash=sha256:74976391f3cee6291708c832b91752be503d9bf5b16e11ca9fe14b39c32c7c07\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nDisable coercion policy and revert wiring changes if side effects appear.\n\n## Context\n\nFIX8 highlighted empty expected_fact_type and malformed fields requiring safe coercion policy.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q`n2) $env:PYTHONPATH=src; python scripts/run_simulation.py --steps 8 --db data/fix8_smoke.db --seed 16\n\n## Notes\n\n### Decisions`n- Coercion is opt-in policy and always logged in diagnostics.",
+      "doc_updated_at": "2026-02-11T12:45:46.595Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:40:16.176Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Implementing controlled coercion policy and expected_fact_type propagation for FIX8.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:44:56.070Z",
+          "author": "CODER",
+          "note": "Verified: controlled coercion policy and expected_fact_type propagation are wired through challenge policy and diagnostics.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:45:46.595Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: controlled coercion policy and expected_fact_type wiring are active and reported in diagnostics.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111238-CRGGYA",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX8 coercion/wiring plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:40:08.892Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX8 coercion and expected type wiring.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Implement FIX8 coercion policy and expected type wiring",
+      "verification": {
+        "note": "Verified: controlled coercion policy and expected_fact_type propagation are wired through challenge policy and diagnostics.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:44:56.070Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Start: Closing FIX8 tracking after dependent tasks are completed and verified."
+        },
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Verified: FIX8 tracking completed with strict schema/coercion implementation, tests, and docs."
+        }
+      ],
+      "commit": {
+        "hash": "f04b7dba28ccb3e56131f29e457b9f37258f3f81",
+        "message": "✅ 5PC685 backend: implement FIX8 strict fact schema and coercion diagnostics"
+      },
+      "depends_on": [
+        "202602111238-5PC685",
+        "202602111238-CRGGYA",
+        "202602111238-PSJSKZ"
+      ],
+      "description": "Track FIX8: strict fact_object schema validation, controlled coercion, expected_fact_type wiring, diagnostics, and regression coverage.",
+      "dirty": false,
+      "doc": "## Summary\n\nTrack FIX8 schema hardening implementation and closure artifacts.\n\n## Scope\n\nIn scope: coordination and closure for tasks 5PC685, CRGGYA, PSJSKZ. Out of scope: unrelated feature work.\n\n## Plan\n\n1) Ensure dependent tasks are documented, approved, and executed. 2) Verify implementation/test evidence. 3) Close tracking task and export artifacts.\n\n## Risks\n\nRisk: stricter schema may increase rejects. Mitigation: controlled coercion policy and explicit diagnostics.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:46:02.570Z — VERIFY — ok\n\nBy: ORCHESTRATOR\n\nNote: Tracking verified: tasks 5PC685, CRGGYA, and PSJSKZ are DONE with verification and commit f04b7db.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:39:02.607Z, excerpt_hash=sha256:1d8aeba1af0a739ccfd207feb7ff305a022232eefacf81556c7a3c25b975b785\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nReopen tracking and dependent tasks if regression appears.\n\n## Context\n\nUser requested full implementation from FIX8 analysis: strict schema, coercion policy, expected type wiring, and diagnostics.\n\n## Verify Steps\n\n1) agentplane task show 202602111238-5PC685 -> DONE/ok. 2) agentplane task show 202602111238-CRGGYA -> DONE/ok. 3) agentplane task show 202602111238-PSJSKZ -> DONE/ok.\n\n## Notes\n\n### Decisions`n- Keep FIX8 split by schema core, coercion/wiring, and tests/docs.",
+      "doc_updated_at": "2026-02-11T12:46:35.101Z",
+      "doc_updated_by": "ORCHESTRATOR",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:46:02.570Z",
+          "author": "ORCHESTRATOR",
+          "note": "Tracking verified: tasks 5PC685, CRGGYA, and PSJSKZ are DONE with verification and commit f04b7db.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:46:27.041Z",
+          "author": "ORCHESTRATOR",
+          "from": "TODO",
+          "note": "Start: Closing FIX8 tracking after dependent tasks are completed and verified.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:46:35.101Z",
+          "author": "ORCHESTRATOR",
+          "from": "DOING",
+          "note": "Verified: FIX8 tracking completed with strict schema/coercion implementation, tests, and docs.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111238-DXS4QT",
+      "id_source": "generated",
+      "owner": "ORCHESTRATOR",
+      "plan_approval": {
+        "note": "Approved FIX8 tracking plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:40:08.886Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Closed FIX8 tracking task.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "PoCWC FIX8 strict fact schema tracking",
+      "verification": {
+        "note": "Tracking verified: tasks 5PC685, CRGGYA, and PSJSKZ are DONE with verification and commit f04b7db.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:46:02.570Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "TESTER",
+          "body": "Start: Finalizing FIX8 regression tests and documentation updates for strict schema/coercion diagnostics."
+        },
+        {
+          "author": "TESTER",
+          "body": "Verified: FIX8 tests/docs completed; pytest and smoke run validate strict schema and coercion diagnostics."
+        }
+      ],
+      "commit": {
+        "hash": "f04b7dba28ccb3e56131f29e457b9f37258f3f81",
+        "message": "✅ 5PC685 backend: implement FIX8 strict fact schema and coercion diagnostics"
+      },
+      "depends_on": [],
+      "description": "Add regression tests for schema/coercion/expected type and update README/ARCHITECTURE diagnostics contract.",
+      "dirty": false,
+      "doc": "## Summary\n\nAdd FIX8 regression tests and documentation updates.\n\n## Scope\n\nIn scope: tests + README + ARCHITECTURE for FIX8 contracts.\n\n## Plan\n\n1) Add unit/regression tests for malformed interpretation_affinity and artifact fields. 2) Add tests for expected_fact_type wiring and diagnostics. 3) Update docs.\n\n## Risks\n\nRisk: brittle tests if tied to implementation details. Mitigation: assert protocol outputs and reason codes.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:44:56.092Z — VERIFY — ok\n\nBy: TESTER\n\nNote: Verified: FIX8 regression tests and docs updates completed; pytest 32 passed and smoke run validated schema/coercion diagnostics output.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:44:45.427Z, excerpt_hash=sha256:20286d93d5a1c2d5a1b0761796c257c0d0d4d2d62af83e43b9180fa88c289536\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert tests/docs patch if inconsistent with final protocol behavior.\n\n## Context\n\nNeed reproducible coverage for schema failures/coercion/expected type and improved diagnostics guidance.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q\n\n## Notes\n\n### Decisions`n- FIX8 schema diagnostics are part of the protocol surface.",
+      "doc_updated_at": "2026-02-11T12:45:46.829Z",
+      "doc_updated_by": "TESTER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:44:45.427Z",
+          "author": "TESTER",
+          "from": "TODO",
+          "note": "Start: Finalizing FIX8 regression tests and documentation updates for strict schema/coercion diagnostics.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:44:56.092Z",
+          "author": "TESTER",
+          "note": "Verified: FIX8 regression tests and docs updates completed; pytest 32 passed and smoke run validated schema/coercion diagnostics output.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:45:46.829Z",
+          "author": "TESTER",
+          "from": "DOING",
+          "note": "Verified: FIX8 tests/docs completed; pytest and smoke run validate strict schema and coercion diagnostics.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111238-PSJSKZ",
+      "id_source": "generated",
+      "owner": "TESTER",
+      "plan_approval": {
+        "note": "Approved FIX8 tests/docs plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:40:08.911Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Added FIX8 regression tests and docs.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "Add FIX8 tests and documentation",
+      "verification": {
+        "note": "Verified: FIX8 regression tests and docs updates completed; pytest 32 passed and smoke run validated schema/coercion diagnostics output.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:44:56.092Z",
+        "updated_by": "TESTER"
       },
       "verify": []
     }
