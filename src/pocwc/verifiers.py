@@ -200,7 +200,14 @@ class NoveltyGateVerifier:
         return max_sim >= 0.93
 
     @staticmethod
-    def _fact_specificity_score(content: str, evidence_items: list[str], places: list[str], artifact_terms: list[str], banned_terms: list[str]) -> int:
+    def _fact_specificity_score(
+        content: str,
+        evidence_items: list[str],
+        places: list[str],
+        artifact_terms: list[str],
+        banned_terms: list[str],
+        artifact_identifier: str,
+    ) -> int:
         text = content.lower()
         score = 0
         if any(ch.isdigit() for ch in content):
@@ -210,6 +217,8 @@ class NoveltyGateVerifier:
         if any(term.lower() in text for term in artifact_terms):
             score += 1
         if len(evidence_items) >= 2:
+            score += 1
+        if artifact_identifier and any(ch.isdigit() for ch in artifact_identifier):
             score += 1
         if 80 <= len(content) <= 280:
             score += 1
@@ -268,6 +277,10 @@ class NoveltyGateVerifier:
             if str(x).strip()
         } or set(self.allowed_fact_types)
         public_artifact_min_evidence = max(1, int(policy.get("public_artifact_min_evidence", 2)))
+        directive_contracts = policy.get("directive_fact_type_contracts", {})
+        expected_fact_type = ""
+        if isinstance(directive_contracts, dict):
+            expected_fact_type = str(directive_contracts.get(challenge.directive_type, "")).strip()
 
         fact_object = candidate.meta_m.get("fact_object", {})
         fact_ok, fact_reason = self._fact_object_valid(fact_object) if isinstance(fact_object, dict) else (False, "fact_object missing")
@@ -291,7 +304,15 @@ class NoveltyGateVerifier:
         else:
             evidence_items = [str(evidence).strip()] if str(evidence).strip() else []
         fact_content = str((fact_object or {}).get("content", "")).strip() if isinstance(fact_object, dict) else ""
-        fact_specificity_score = self._fact_specificity_score(fact_content, evidence_items, places, artifact_terms, banned_terms)
+        artifact_identifier = str((fact_object or {}).get("artifact_identifier", "")).strip() if isinstance(fact_object, dict) else ""
+        fact_specificity_score = self._fact_specificity_score(
+            fact_content,
+            evidence_items,
+            places,
+            artifact_terms,
+            banned_terms,
+            artifact_identifier,
+        )
         valid_references = [r for r in dict.fromkeys(references) if r in active_anchor_ids]
         refs_count = len(valid_references)
         refs_quality = 0.0
@@ -347,14 +368,21 @@ class NoveltyGateVerifier:
             fail("FACT_SCHEMA_INVALID", f"invalid fact_object ({fact_reason})")
         if not fact_type:
             fail("TYPE_NOT_IN_ENUM", "fact_object.type is outside allowed enum")
+        if expected_fact_type and fact_type and fact_type != expected_fact_type:
+            fail("DIRECTIVE_CONTRACT_FAIL", f"directive {challenge.directive_type} expects fact_type={expected_fact_type}")
         if fact_type in specificity_types and fact_specificity_score < specificity_min:
             fail("FACT_SPECIFICITY_BELOW_MIN", "fact specificity is below minimum")
         if fact_type == "public_artifact":
+            artifact_kind = str((fact_object or {}).get("artifact_kind", "")).strip() if isinstance(fact_object, dict) else ""
+            artifact_locator = str((fact_object or {}).get("artifact_locator", "")).strip() if isinstance(fact_object, dict) else ""
+            artifact_identifier = str((fact_object or {}).get("artifact_identifier", "")).strip() if isinstance(fact_object, dict) else ""
             artifact_hit = any(term.lower() in fact_content.lower() for term in artifact_terms) or any(
                 term.lower() in " ".join(evidence_items).lower() for term in artifact_terms
             )
             if not artifact_hit:
                 fail("FACT_SCHEMA_INVALID", "public_artifact is missing a concrete artifact/object signal")
+            if not artifact_kind or not artifact_locator or not artifact_identifier:
+                fail("FACT_SCHEMA_INVALID", "public_artifact requires artifact_kind/artifact_locator/artifact_identifier")
             if len(evidence_items) < public_artifact_min_evidence:
                 fail("EVIDENCE_TOO_WEAK", "public_artifact requires stronger evidence cardinality")
         if mode == "diversify":
@@ -429,8 +457,10 @@ class NoveltyGateVerifier:
             "fact_specificity_score": int(fact_specificity_score),
             "fact_specificity_min": int(specificity_min),
             "fact_type": fact_type,
+            "expected_fact_type": expected_fact_type,
             "fact_id": fact_id,
             "evidence_count": len(evidence_items),
+            "artifact_identifier": artifact_identifier,
             "current_height": current_height,
         }
         return VerificationResult(

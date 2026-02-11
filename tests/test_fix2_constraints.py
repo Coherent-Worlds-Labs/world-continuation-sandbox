@@ -35,6 +35,12 @@ class Fix2ConstraintTests(unittest.TestCase):
             "max_same_fact_type_diversify": 2,
             "fact_type_enum": ["public_artifact", "witness", "measurement", "institutional_action", "resource_change", "agent_commitment"],
             "public_artifact_min_evidence": 2,
+            "directive_fact_type_contracts": {
+                "IntroduceAmbiguousFact": "public_artifact",
+                "InstitutionalAction": "institutional_action",
+                "AgentCommitment": "agent_commitment",
+                "ResourceConstraint": "resource_change",
+            },
         }
         policy.update(policy_overrides)
         return Challenge(
@@ -68,6 +74,9 @@ class Fix2ConstraintTests(unittest.TestCase):
             "introduced_by": "City clerk",
             "time": "midday",
             "evidence": ["report from public ledger", "witness transcript in archive registry"],
+            "artifact_kind": "record",
+            "artifact_locator": "north archive wing",
+            "artifact_identifier": "REG-221",
             "interpretation_affinity": {"I1": 0.2, "I2": 0.6, "I3": 0.2},
             "references": ["F_PREV_1"],
         }
@@ -138,6 +147,26 @@ class Fix2ConstraintTests(unittest.TestCase):
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
         self.assertIn("FACT_SPECIFICITY_BELOW_MIN", result.signals["reason_codes"])
+
+    def test_public_artifact_requires_artifact_fields(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(51), llm=None)
+        challenge = self._challenge()
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["artifact_identifier"] = ""
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("FACT_SCHEMA_INVALID", result.signals["reason_codes"])
+
+    def test_directive_contract_fail_is_explicit(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(52), llm=None)
+        challenge = self._challenge(directive_fact_type_contracts={"IntroduceAmbiguousFact": "public_artifact"})
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["type"] = "agent_commitment"
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("DIRECTIVE_CONTRACT_FAIL", result.signals["reason_codes"])
 
     def test_step_one_does_not_require_refs(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(6), llm=None)

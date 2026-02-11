@@ -496,6 +496,17 @@ class SimulationEngine:
             )
         )
         public_artifact_min_evidence = max(1, self._progression_int("public_artifact_min_evidence", 2))
+        directive_fact_type_contracts = dict(
+            self.progression.get(
+                "directive_fact_type_contracts",
+                {
+                    "IntroduceAmbiguousFact": "public_artifact",
+                    "InstitutionalAction": "institutional_action",
+                    "AgentCommitment": "agent_commitment",
+                    "ResourceConstraint": "resource_change",
+                },
+            )
+        )
         specificity_banned_terms = list(
             self.progression.get(
                 "specificity_banned_terms",
@@ -558,6 +569,7 @@ class SimulationEngine:
                 "specificity_artifacts": specificity_artifacts,
                 "specificity_banned_terms": specificity_banned_terms,
                 "public_artifact_min_evidence": public_artifact_min_evidence,
+                "directive_fact_type_contracts": directive_fact_type_contracts,
                 "novelty_phase_early_end": novelty_phase_early_end,
                 "novelty_phase_mid_end": novelty_phase_mid_end,
                 "sim_fact_max": sim_fact_max,
@@ -977,6 +989,106 @@ class SimulationEngine:
             "interpretation_shift": round(float(interpretation_shift), 3),
         }
 
+    @staticmethod
+    def _normalize_fact_type(raw: Any) -> str:
+        text = str(raw or "").strip().lower()
+        mapping = {
+            "fact": "public_artifact",
+            "new_fact": "public_artifact",
+            "artifact": "public_artifact",
+            "publicartifact": "public_artifact",
+            "measurement": "measurement",
+            "institution action": "institutional_action",
+            "resource change": "resource_change",
+            "agent commitment": "agent_commitment",
+        }
+        return mapping.get(text, text.replace(" ", "_"))
+
+    @staticmethod
+    def _normalize_fact_id(raw: Any) -> str:
+        return str(raw or "").strip().upper()
+
+    def _normalized_fact_object(self, raw_obj: Any, allowed_types: set[str]) -> dict[str, Any]:
+        if not isinstance(raw_obj, dict):
+            return {}
+        normalized = dict(raw_obj)
+        normalized["id"] = self._normalize_fact_id(normalized.get("id", ""))
+        norm_type = self._normalize_fact_type(normalized.get("type", ""))
+        normalized["type"] = norm_type if norm_type in allowed_types else norm_type
+        refs = normalized.get("references", [])
+        if isinstance(refs, list):
+            normalized["references"] = [self._normalize_fact_id(x) for x in refs if self._normalize_fact_id(x)]
+        else:
+            normalized["references"] = []
+        return normalized
+
+    def _candidate_screen(
+        self,
+        challenge: Challenge,
+        candidate,
+        *,
+        recent_narratives: list[str],
+        recent_fact_texts: list[str],
+    ) -> dict[str, Any]:
+        policy = challenge.verifier_policy
+        allowed_types = {str(x).strip() for x in policy.get("fact_type_enum", []) if str(x).strip()}
+        if not allowed_types:
+            allowed_types = {"public_artifact", "witness", "measurement", "institutional_action", "resource_change", "agent_commitment"}
+        contracts = policy.get("directive_fact_type_contracts", {})
+        expected_type = ""
+        if isinstance(contracts, dict):
+            expected_type = str(contracts.get(challenge.directive_type, "")).strip()
+
+        raw_fact_object = candidate.meta_m.get("fact_object", {})
+        normalized_fact_object = self._normalized_fact_object(raw_fact_object, allowed_types)
+        fact_type = str(normalized_fact_object.get("type", "")).strip()
+        fact_id = str(normalized_fact_object.get("id", "")).strip()
+        evidence = normalized_fact_object.get("evidence", [])
+        evidence_count = len([str(x).strip() for x in evidence]) if isinstance(evidence, list) else (1 if str(evidence).strip() else 0)
+        content = str(normalized_fact_object.get("content", "")).strip()
+        refs = normalized_fact_object.get("references", [])
+        refs_count = len(refs) if isinstance(refs, list) else 0
+
+        reason_codes: list[str] = []
+        if not fact_id or not fact_type or fact_type not in allowed_types:
+            reason_codes.append("FACT_SCHEMA_INVALID")
+        if expected_type and fact_type and fact_type != expected_type:
+            reason_codes.append("DIRECTIVE_CONTRACT_FAIL")
+        if not content or len(content.split()) < 4:
+            reason_codes.append("FACT_SCHEMA_INVALID")
+        if fact_type == "public_artifact":
+            kind = str(normalized_fact_object.get("artifact_kind", "")).strip()
+            locator = str(normalized_fact_object.get("artifact_locator", "")).strip()
+            identifier = str(normalized_fact_object.get("artifact_identifier", "")).strip()
+            if not kind or not locator or not identifier:
+                reason_codes.append("FACT_SCHEMA_INVALID")
+
+        fact_text = self._fact_object_text(normalized_fact_object)
+        max_fact_similarity = max((self._semantic_similarity(fact_text, prev) for prev in recent_fact_texts), default=0.0) if fact_text else 0.0
+        scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip() or str(candidate.artifact_x)
+        max_scene_similarity = max((self._semantic_similarity(scene, prev) for prev in recent_narratives), default=0.0) if recent_narratives else 0.0
+        novelty_score = max(0.0, 1.0 - max_fact_similarity)
+
+        # deterministic ranking: protocol pass first, then novelty, then evidence/ref richness
+        rank_score = (
+            (1000.0 if not reason_codes else 0.0)
+            + novelty_score * 100.0
+            + float(evidence_count * 2 + refs_count)
+        )
+        return {
+            "raw_fact_object": raw_fact_object if isinstance(raw_fact_object, dict) else {},
+            "normalized_fact_object": normalized_fact_object,
+            "fact_type": fact_type,
+            "expected_type": expected_type,
+            "novelty_score": round(novelty_score, 3),
+            "fact_similarity": round(max_fact_similarity, 3),
+            "scene_similarity": round(max_scene_similarity, 3),
+            "reason_codes": list(dict.fromkeys(reason_codes)),
+            "rank_score": round(rank_score, 3),
+            "evidence_count": evidence_count,
+            "references_count": refs_count,
+        }
+
     def run(self, steps: int | None = None, progress_callback: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
         self._seed_genesis()
         total_steps = steps or self.config.steps
@@ -1006,8 +1118,10 @@ class SimulationEngine:
             recent_facts = self._recent_branch_facts(branch["branch_id"], limit=120)
             recent_fact_texts = [f"{str(f.get('anchor_type', '')).strip()}: {str(f.get('fact_text', '')).strip()}" for f in recent_facts]
 
+            generated_candidates: list[Any] = []
             for index, prover in enumerate(self.provers, start=1):
                 candidate = prover.generate(challenge, index)
+                generated_candidates.append(candidate)
                 self.store.insert_candidate(
                     {
                         "candidate_id": candidate.candidate_id,
@@ -1019,86 +1133,142 @@ class SimulationEngine:
                         "created_at": self._now(),
                     }
                 )
-                candidate_scene = str(candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
-                candidate_text = candidate_scene or candidate.artifact_x
-                candidate_fact_text = self._fact_object_text(candidate.meta_m.get("fact_object", {}))
-                max_fact_similarity = 0.0
-                max_scene_similarity = 0.0
-                if candidate_fact_text and recent_fact_texts:
-                    max_fact_similarity = max(self._semantic_similarity(candidate_fact_text, prev) for prev in recent_fact_texts)
-                if recent_narratives:
-                    max_scene_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
-                hard_similarity_threshold = float(challenge.verifier_policy.get("sim_fact_max", 0.92))
-                hard_repetition_fail = max_fact_similarity >= hard_similarity_threshold
-                novelty_penalty = 0.0
-                if max_fact_similarity > 0.80:
-                    novelty_penalty = min(0.85, ((max_fact_similarity - 0.80) / 0.20) ** 2 * 0.85)
-                verdict, score, signals, levels, reasons = self._evaluate_candidate(
+
+            screening: list[dict[str, Any]] = []
+            for candidate in generated_candidates:
+                screen = self._candidate_screen(
                     challenge,
                     candidate,
-                    repetition_penalty=novelty_penalty,
-                    hard_repetition_fail=hard_repetition_fail,
+                    recent_narratives=recent_narratives,
+                    recent_fact_texts=recent_fact_texts,
                 )
-                adjusted_score = score
-                adjusted_verdict = verdict
-                adjusted_reasons = list(reasons)
-                if novelty_penalty > 0:
-                    adjusted_reasons.append(
-                        f"Repetition penalty applied (fact_similarity={max_fact_similarity:.2f}, penalty={novelty_penalty:.3f})"
-                    )
-                if hard_repetition_fail:
-                    adjusted_reasons.append(
-                        f"Hard repetition reject (fact_similarity={max_fact_similarity:.2f} >= threshold={hard_similarity_threshold:.2f})"
-                    )
-
+                screening.append(screen)
                 candidate_traces.append(
                     {
                         "prover_id": candidate.prover_id,
                         "candidate_id": candidate.candidate_id,
-                        "score": round(adjusted_score, 3),
-                        "raw_score": round(score, 3),
-                        "similarity": round(max_fact_similarity, 3),
-                        "fact_similarity": round(max_fact_similarity, 3),
-                        "scene_similarity": round(max_scene_similarity, 3),
-                        "penalty": round(novelty_penalty, 3),
-                        "new_fact_count": int(signals.get("new_fact_count", 0.0)),
-                        "reference_count": int(signals.get("reference_count", 0.0)),
-                        "refs_quality": round(float(signals.get("refs_quality", 0.0)), 3),
-                        "progress_gate": int(signals.get("progress_gate", 0.0)),
-                        "novelty_score": signals.get("novelty_score", 0.0),
-                        "novel_fact": signals.get("novel_fact", 0.0),
-                        "novel_type": signals.get("novel_type", 0.0),
-                        "novel_refs": signals.get("novel_refs", 0.0),
-                        "fact_specificity_score": signals.get("fact_specificity_score", 0.0),
-                        "tension_progress": signals.get("tension_progress", 0.0),
-                        "verdict": adjusted_verdict.value,
+                        "selected": False,
+                        "screen_rank": screen.get("rank_score", 0.0),
+                        "screen_reason_codes": screen.get("reason_codes", []),
+                        "raw_fact_object": screen.get("raw_fact_object", {}),
+                        "normalized_fact_object": screen.get("normalized_fact_object", {}),
+                        "similarity": screen.get("fact_similarity", 0.0),
+                        "fact_similarity": screen.get("fact_similarity", 0.0),
+                        "scene_similarity": screen.get("scene_similarity", 0.0),
+                        "score": None,
+                        "raw_score": None,
+                        "penalty": 0.0,
+                        "new_fact_count": 0,
+                        "reference_count": 0,
+                        "refs_quality": 0.0,
+                        "progress_gate": 0,
+                        "novelty_score": screen.get("novelty_score", 0.0),
+                        "novel_fact": 0.0,
+                        "novel_type": 0.0,
+                        "novel_refs": 0.0,
+                        "fact_specificity_score": 0.0,
+                        "tension_progress": float(candidate.meta_m.get("tension_progress", 0.0)),
+                        "verdict": "skip",
                         "llm_used": bool(candidate.meta_m.get("llm_used", False)),
                         "source": str(candidate.meta_m.get("story_generation_source", "unknown")),
                         "llm_error": str(candidate.meta_m.get("llm_error", "")),
                         "escape_mode": bool(challenge.verifier_policy.get("escape_mode", False)),
-                        "fact_id": str(candidate.meta_m.get("fact_object", {}).get("id", "")),
-                        "fact_type": str(candidate.meta_m.get("fact_object", {}).get("type", "")),
-                        "fact_refs": list(candidate.meta_m.get("fact_object", {}).get("references", []))
-                        if isinstance(candidate.meta_m.get("fact_object", {}).get("references", []), list)
+                        "fact_id": str((screen.get("normalized_fact_object", {}) or {}).get("id", "")),
+                        "fact_type": str((screen.get("normalized_fact_object", {}) or {}).get("type", "")),
+                        "fact_refs": list((screen.get("normalized_fact_object", {}) or {}).get("references", []))
+                        if isinstance((screen.get("normalized_fact_object", {}) or {}).get("references", []), list)
                         else [],
-                        "reason_codes": list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else [],
-                        "reason_details": dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {},
+                        "reason_codes": list(screen.get("reason_codes", [])) if isinstance(screen.get("reason_codes", []), list) else [],
+                        "reason_details": {
+                            "screen_expected_type": screen.get("expected_type", ""),
+                            "screen_evidence_count": screen.get("evidence_count", 0),
+                            "screen_references_count": screen.get("references_count", 0),
+                        },
                     }
                 )
-                if adjusted_score > best_any_score:
-                    best_any_candidate = candidate
-                    best_any_score = adjusted_score
-                    best_any_meta = signals
-                    best_any_levels = levels
-                    best_any_reasons = adjusted_reasons
-                    best_any_reason_codes = list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else []
-                    best_any_reason_details = dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {}
-                if adjusted_verdict == Verdict.ACCEPT and adjusted_score > best_score:
-                    accepted_candidate = candidate
-                    best_score = adjusted_score
-                    best_meta = signals
-                    best_levels = levels
-                self.store.update_candidate_status(candidate.candidate_id, adjusted_verdict.value)
+
+            # Select one canonical candidate per step: schema/contract clean first, then highest rank.
+            candidate_indices = list(range(len(generated_candidates)))
+            preferred = [i for i in candidate_indices if not screening[i].get("reason_codes")]
+            select_pool = preferred if preferred else candidate_indices
+            selected_index = max(select_pool, key=lambda i: float(screening[i].get("rank_score", 0.0)))
+            selected_candidate = generated_candidates[selected_index]
+            selected_screen = screening[selected_index]
+            candidate_traces[selected_index]["selected"] = True
+            if isinstance(selected_candidate.meta_m, dict):
+                selected_candidate.meta_m["fact_object"] = dict(selected_screen.get("normalized_fact_object", {}))
+
+            candidate_scene = str(selected_candidate.meta_m.get("story_bundle", {}).get("scene", "")).strip()
+            candidate_text = candidate_scene or selected_candidate.artifact_x
+            candidate_fact_text = self._fact_object_text(selected_screen.get("normalized_fact_object", {}))
+            max_fact_similarity = 0.0
+            max_scene_similarity = 0.0
+            if candidate_fact_text and recent_fact_texts:
+                max_fact_similarity = max(self._semantic_similarity(candidate_fact_text, prev) for prev in recent_fact_texts)
+            if recent_narratives:
+                max_scene_similarity = max(self._semantic_similarity(candidate_text, prev) for prev in recent_narratives)
+            hard_similarity_threshold = float(challenge.verifier_policy.get("sim_fact_max", 0.92))
+            hard_repetition_fail = max_fact_similarity >= hard_similarity_threshold
+            novelty_penalty = 0.0
+            if max_fact_similarity > 0.80:
+                novelty_penalty = min(0.85, ((max_fact_similarity - 0.80) / 0.20) ** 2 * 0.85)
+
+            verdict, score, signals, levels, reasons = self._evaluate_candidate(
+                challenge,
+                selected_candidate,
+                repetition_penalty=novelty_penalty,
+                hard_repetition_fail=hard_repetition_fail,
+            )
+            adjusted_score = score
+            adjusted_verdict = verdict
+            adjusted_reasons = list(reasons)
+            if novelty_penalty > 0:
+                adjusted_reasons.append(
+                    f"Repetition penalty applied (fact_similarity={max_fact_similarity:.2f}, penalty={novelty_penalty:.3f})"
+                )
+            if hard_repetition_fail:
+                adjusted_reasons.append(
+                    f"Hard repetition reject (fact_similarity={max_fact_similarity:.2f} >= threshold={hard_similarity_threshold:.2f})"
+                )
+
+            candidate_traces[selected_index].update(
+                {
+                    "score": round(adjusted_score, 3),
+                    "raw_score": round(score, 3),
+                    "penalty": round(novelty_penalty, 3),
+                    "new_fact_count": int(signals.get("new_fact_count", 0.0)),
+                    "reference_count": int(signals.get("reference_count", 0.0)),
+                    "refs_quality": round(float(signals.get("refs_quality", 0.0)), 3),
+                    "progress_gate": int(signals.get("progress_gate", 0.0)),
+                    "novelty_score": signals.get("novelty_score", 0.0),
+                    "novel_fact": signals.get("novel_fact", 0.0),
+                    "novel_type": signals.get("novel_type", 0.0),
+                    "novel_refs": signals.get("novel_refs", 0.0),
+                    "fact_specificity_score": signals.get("fact_specificity_score", 0.0),
+                    "verdict": adjusted_verdict.value,
+                    "reason_codes": list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else [],
+                    "reason_details": dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {},
+                }
+            )
+
+            for i, candidate in enumerate(generated_candidates):
+                if i == selected_index:
+                    self.store.update_candidate_status(candidate.candidate_id, adjusted_verdict.value)
+                else:
+                    self.store.update_candidate_status(candidate.candidate_id, Verdict.REJECT.value)
+
+            best_any_candidate = selected_candidate
+            best_any_score = adjusted_score
+            best_any_meta = signals
+            best_any_levels = levels
+            best_any_reasons = adjusted_reasons
+            best_any_reason_codes = list(signals.get("reason_codes", [])) if isinstance(signals.get("reason_codes", []), list) else []
+            best_any_reason_details = dict(signals.get("reason_details", {})) if isinstance(signals.get("reason_details", {}), dict) else {}
+            if adjusted_verdict == Verdict.ACCEPT:
+                accepted_candidate = selected_candidate
+                best_score = adjusted_score
+                best_meta = signals
+                best_levels = levels
 
             new_fact_count_current = int(best_any_meta.get("new_fact_count", 0.0)) if best_any_meta else 0
             if accepted_candidate is not None:
@@ -1191,6 +1361,7 @@ class SimulationEngine:
                         "step": step,
                         "total_steps": total_steps,
                         "branch_id": branch["branch_id"],
+                        "directive_type": challenge.directive_type,
                         "accepted": self.runtime.accepted_candidates,
                         "rejected": self.runtime.rejected_candidates,
                         "forks": self.runtime.forks_created,
@@ -1211,6 +1382,8 @@ class SimulationEngine:
                         "decision_reasons": best_any_reasons,
                         "decision_reason_codes": best_any_reason_codes,
                         "decision_reason_details": best_any_reason_details,
+                        "selected_candidate_id": best_any_candidate.candidate_id if best_any_candidate is not None else "",
+                        "selected_fact_object": dict(best_any_candidate.meta_m.get("fact_object", {})) if best_any_candidate is not None and isinstance(best_any_candidate.meta_m.get("fact_object", {}), dict) else {},
                         "candidate_traces": candidate_traces,
                         "accepted_via_retry": accepted_via_retry,
                         "reject_streak": reject_streak,

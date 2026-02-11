@@ -71,6 +71,7 @@ class Prover:
     @staticmethod
     def _fact_object_from_legacy_fact(fact: dict[str, Any], strongest: str) -> dict[str, Any]:
         anchor_type = Prover._normalize_fact_type(fact.get("anchor_type", "public_artifact"))
+        artifact_identifier = f"A-{abs(hash(str(fact.get('fact_id', '')))) % 10000:04d}"
         return {
             "id": Prover._normalize_fact_id(fact.get("fact_id", "")),
             "type": anchor_type,
@@ -82,6 +83,9 @@ class Prover:
             "introduced_by": str(fact.get("subject", "")).strip(),
             "time": str(fact.get("time_hint", "")).strip(),
             "evidence": [str(fact.get("evidence_type", "")).strip()] if str(fact.get("evidence_type", "")).strip() else [],
+            "artifact_kind": "record",
+            "artifact_locator": str(fact.get("location_hint", "")).strip(),
+            "artifact_identifier": artifact_identifier,
             "interpretation_affinity": {
                 "I1": 0.2 if strongest != "I1" else 0.6,
                 "I2": 0.2 if strongest != "I2" else 0.6,
@@ -266,6 +270,9 @@ class Prover:
                 f"Observation: entry {operation_code} appears in the public registry at {primary_fact['location_hint']}.",
                 f"Observation: two witness logs timestamped {primary_fact['time_hint']} reference the same entry id.",
             ],
+            "artifact_kind": "registry_record",
+            "artifact_locator": primary_fact["location_hint"],
+            "artifact_identifier": operation_code,
             "interpretation_affinity": {
                 "I1": 0.2 if strongest != "I1" else 0.6,
                 "I2": 0.2 if strongest != "I2" else 0.6,
@@ -364,7 +371,7 @@ class Prover:
         prompt = (
             "Return JSON with keys: artifact_x (string), bundle (object with keys "
             "scene, surface_confirmation, alternative_compatibility[list], social_effect, deferred_tension), "
-            "fact_object (object with id,type,content,introduced_by,time,evidence[list],interpretation_affinity,references), "
+            "fact_object (object with id,type,content,introduced_by,time,evidence[list],artifact_kind,artifact_locator,artifact_identifier,interpretation_affinity,references), "
             "novel_facts (list with exactly one object containing fact_id,anchor_type,subject,predicate,object,time_hint,location_hint,evidence_type,falsifiable,can_be_reinterpreted,references[list]), "
             "what_changed_since_previous_step (string), why_not_rephrase (string), tension_progress (float 0..1). "
             f"Directive: {challenge.directive_type}. Style: {self.style}. "
@@ -376,9 +383,11 @@ class Prover:
             f"Available prior fact IDs: {challenge.verifier_policy.get('last_fact_ids', [])}\n"
             "For AgentCommitment directive, set anchor_type=agent_commitment and produce a public commitment statement. "
             "For InstitutionalAction directive, set anchor_type=institutional_action and describe one concrete formal action."
+            " For ResourceConstraint directive, set anchor_type=resource_change."
             " fact_object.type MUST be one of: public_artifact, witness, measurement, institutional_action, resource_change, agent_commitment. "
             "fact_object.content must include one location, one numeric/date token, and one concrete artifact/object. "
-            "fact_object.evidence must contain exactly 2 observable statements."
+            "fact_object.evidence must contain exactly 2 observable statements. "
+            "When fact_object.type=public_artifact, include artifact_kind, artifact_locator, and artifact_identifier."
         )
         if escape_mode:
             prompt += (

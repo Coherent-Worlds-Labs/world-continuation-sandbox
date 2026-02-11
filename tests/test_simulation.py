@@ -57,6 +57,9 @@ class SimulationTests(unittest.TestCase):
             self.assertIn("escape_mode", update)
             self.assertIn("decision_reason_codes", update)
             self.assertIn("decision_reason_details", update)
+            self.assertIn("directive_type", update)
+            self.assertIn("selected_candidate_id", update)
+            self.assertIn("selected_fact_object", update)
             self.assertIn("candidate_traces", update)
             self.assertIn("new_fact_count", update)
             self.assertIn("novel_fact_ratio", update)
@@ -69,7 +72,13 @@ class SimulationTests(unittest.TestCase):
             self.assertEqual(int(update["new_fact_count"]), float(update["new_fact_count"]))
             traces = update["candidate_traces"]
             self.assertGreaterEqual(len(traces), 1)
+            selected_count = sum(1 for trace in traces if bool(trace.get("selected")))
+            self.assertEqual(selected_count, 1)
             for trace in traces:
+                self.assertIn("selected", trace)
+                self.assertIn("raw_fact_object", trace)
+                self.assertIn("normalized_fact_object", trace)
+                self.assertIn("screen_reason_codes", trace)
                 self.assertIn("similarity", trace)
                 self.assertIn("fact_similarity", trace)
                 self.assertIn("scene_similarity", trace)

@@ -54,6 +54,7 @@ def _render_progress(update: dict) -> None:
     step = int(update["step"])
     total = int(update["total_steps"])
     branch = str(update["branch_id"])
+    directive_type = str(update.get("directive_type") or "")
     accepted = int(update["accepted"])
     rejected = int(update["rejected"])
     forks = int(update["forks"])
@@ -75,6 +76,8 @@ def _render_progress(update: dict) -> None:
     decision_reasons = update.get("decision_reasons") or []
     decision_reason_codes = update.get("decision_reason_codes") or []
     decision_reason_details = update.get("decision_reason_details") or {}
+    selected_candidate_id = str(update.get("selected_candidate_id") or "")
+    selected_fact_object = update.get("selected_fact_object") or {}
     accepted_via_retry = bool(update.get("accepted_via_retry"))
     reject_streak = int(update.get("reject_streak") or 0)
     escape_mode = bool(update.get("escape_mode"))
@@ -91,6 +94,7 @@ def _render_progress(update: dict) -> None:
     print(
         f"\n\033[1;34m=== Step {step}/{total} ===\033[0m "
         f"{_style('branch:', branch, color='35')} "
+        f"{_style('directive:', directive_type if directive_type else '-', color='94')} "
         f"{_style('mode:', mode, color='33')} "
         f"{_style('theta:', f'{theta:.2f}', color='33')}"
     )
@@ -120,6 +124,10 @@ def _render_progress(update: dict) -> None:
         print(_style("reason_codes:", ", ".join(str(x) for x in decision_reason_codes), color="91"))
     if decision_reason_details:
         print(_style("reason_details:", str(decision_reason_details), color="90"))
+    if selected_candidate_id:
+        print(_style("selected_candidate:", selected_candidate_id, color="96"))
+    if isinstance(selected_fact_object, dict) and selected_fact_object:
+        print(_style("selected_fact_object:", json.dumps(selected_fact_object, ensure_ascii=False), color="90"))
     if candidate_traces:
         for trace in candidate_traces:
             print(

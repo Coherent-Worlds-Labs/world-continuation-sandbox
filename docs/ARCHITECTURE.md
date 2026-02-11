@@ -45,8 +45,9 @@ The prototype is a single-process simulation system with SQLite persistence and 
 2. Select active branch.
 3. Build challenge from projection + directive + difficulty.
 4. Generate candidates from prover pool.
-5. Verify each candidate through cascade (fact-centric novelty gate plus general verifiers).
-6. Aggregate scores and accept only when score threshold passes and protocol gates report no hard failures.
+5. Select one canonical candidate for the step using deterministic screening (schema/contract pass first, then rank).
+6. Verify only the selected candidate through cascade (fact-centric novelty gate plus general verifiers).
+7. Aggregate scores and accept only when score threshold passes and protocol gates report no hard failures.
 7. Update branch metrics and optionally fork.
 8. Recompute metrics, including ontological stagnation, and retarget difficulty on epoch boundaries.
 
@@ -111,6 +112,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - FIX5 adds semantic hardening: strict fact-type enum validation, fact-specificity gate, and scene-stagnation breaker (`InstitutionalAction`).
 - FIX6 separates protocol gates and emits deterministic diagnostics (`reason_codes` + `reason_details`), including explicit novelty threshold comparisons and step-aware reference requirements.
 - `novelty_score` gate is pure (`novelty_score >= novelty_min`), while progress/schema/evidence/consistency failures are reported under their own reason codes.
+- FIX7 enforces one-candidate protocol semantics per step, adds directive-type contract gates, and requires explicit artifact fields for `public_artifact`.
 - L3 is simulated, not a real expensive external reasoning model.
 - No distributed consensus networking or cryptoeconomic security.
 - LLM provider calls require explicit API credentials and network availability; missing credentials trigger deterministic fallback.

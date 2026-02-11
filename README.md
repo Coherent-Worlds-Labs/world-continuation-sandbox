@@ -80,6 +80,7 @@ Runtime stream notes:
 - The CLI prints per-candidate traces with `llm_used=true|false`, source (`llm`, `llm_bundle_rebuilt`, or `fallback`), verdict, and score.
 - The stream also shows fact-centric `step_similarity` and per-candidate novelty diagnostics (`fact_similarity`, `scene_similarity`, `refs_quality`, `novel_fact|novel_type|novel_refs`, `penalty`, `raw`, adjusted `score`) to make repetition visible.
 - Reject traces now include structured diagnostics: `reason_codes` and `reason_details` (with `novelty_total`, `novelty_min`, `refs_min`, `refs_count`, `evidence_count`, and compared metric key).
+- Each step now selects one canonical candidate and verifies only that candidate; cross-prover structural disagreements no longer directly reject the whole step.
 - The stream includes progression metrics: `new_fact_count` (integer), `novel_fact_ratio`, `semantic_delta`, `stagnation`, `ontological`, and active `anchors`.
 - Placeholder-like `artifact_x` values (for example `artifact_x`, `артефакт_Х`, `TBD`) are rejected; the engine falls back to a rebuilt or deterministic artifact text.
 - Diversify mode now pushes stronger novelty pressure: directives are biased toward non-maintenance events, prompt constraints require one concrete new event per step, and high overlap candidates receive a bounded repetition penalty.
@@ -95,8 +96,10 @@ Novelty contract:
 - Fact types are now strict-enum (`public_artifact`, `witness`, `measurement`, `institutional_action`, `resource_change`, `agent_commitment`); unknown/generic types are rejected.
 - Concrete fact specificity is enforced (`fact_specificity_score`): concrete content plus observable evidence are required for artifact/measurement/institutional facts.
 - `public_artifact` facts must contain explicit artifact/object evidence and meet minimum evidence cardinality (`public_artifact_min_evidence`).
+- `public_artifact` facts must include `artifact_kind`, `artifact_locator`, and `artifact_identifier`.
 - Gate predicates are separated and reported independently: novelty, progress, schema/type/evidence, and structural consistency.
 - `fact_id` and references are canonicalized (case-insensitive normalization), and mismatches between `fact_object` and `novel_facts` are rejected as structural inconsistency.
+- Directive contracts are type-oriented and explicit (`directive_fact_type_contracts`); mismatches trigger `DIRECTIVE_CONTRACT_FAIL`.
 - `AgentCommitment` directives require at least one persistent commitment anchor.
 - Scene stagnation is monitored; repeated near-identical scenes trigger an `InstitutionalAction` breaker directive instead of lowering acceptance thresholds.
 - Final acceptance now requires both score threshold and `progress_gate=true`; high stylistic score without structural progress is rejected.

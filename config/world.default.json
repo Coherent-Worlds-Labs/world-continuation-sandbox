@@ -143,6 +143,12 @@
       "РЅРµРёР·РІРµСЃС‚РЅРѕ"
     ],
     "public_artifact_min_evidence": 2,
+    "directive_fact_type_contracts": {
+      "IntroduceAmbiguousFact": "public_artifact",
+      "InstitutionalAction": "institutional_action",
+      "AgentCommitment": "agent_commitment",
+      "ResourceConstraint": "resource_change"
+    },
     "escape_directive_types": [
       "IntroduceAmbiguousFact",
       "InstitutionalAction",
