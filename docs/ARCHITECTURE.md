@@ -113,6 +113,7 @@ python scripts/run_server.py --db data/world.db --host 127.0.0.1 --port 8080
 - FIX6 separates protocol gates and emits deterministic diagnostics (`reason_codes` + `reason_details`), including explicit novelty threshold comparisons and step-aware reference requirements.
 - `novelty_score` gate is pure (`novelty_score >= novelty_min`), while progress/schema/evidence/consistency failures are reported under their own reason codes.
 - FIX7 enforces one-candidate protocol semantics per step, adds directive-type contract gates, and requires explicit artifact fields for `public_artifact`.
+- FIX8 adds strict schema validation for `fact_object` with structured field-level errors and optional policy-based coercion for known malformed payloads.
 - L3 is simulated, not a real expensive external reasoning model.
 - No distributed consensus networking or cryptoeconomic security.
 - LLM provider calls require explicit API credentials and network availability; missing credentials trigger deterministic fallback.

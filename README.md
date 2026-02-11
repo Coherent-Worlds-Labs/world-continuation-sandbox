@@ -100,6 +100,8 @@ Novelty contract:
 - Gate predicates are separated and reported independently: novelty, progress, schema/type/evidence, and structural consistency.
 - `fact_id` and references are canonicalized (case-insensitive normalization), and mismatches between `fact_object` and `novel_facts` are rejected as structural inconsistency.
 - Directive contracts are type-oriented and explicit (`directive_fact_type_contracts`); mismatches trigger `DIRECTIVE_CONTRACT_FAIL`.
+- FIX8 introduces strict `fact_object` schema validation (typed `interpretation_affinity`, constrained artifact fields, and explicit schema path errors in diagnostics).
+- Controlled coercion is policy-driven (`allow_fact_object_coercion`): when enabled, known malformed fields are normalized and logged under `coercions` in diagnostics.
 - `AgentCommitment` directives require at least one persistent commitment anchor.
 - Scene stagnation is monitored; repeated near-identical scenes trigger an `InstitutionalAction` breaker directive instead of lowering acceptance thresholds.
 - Final acceptance now requires both score threshold and `progress_gate=true`; high stylistic score without structural progress is rejected.

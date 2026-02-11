@@ -41,6 +41,12 @@ class Fix2ConstraintTests(unittest.TestCase):
                 "AgentCommitment": "agent_commitment",
                 "ResourceConstraint": "resource_change",
             },
+            "expected_fact_type": "public_artifact",
+            "allow_fact_object_coercion": False,
+            "coercion_default_affinity": {"I1": 0.34, "I2": 0.33, "I3": 0.33},
+            "interpretation_keys": ["I1", "I2", "I3"],
+            "artifact_kind_enum": ["registry_record", "evidence_card", "bulletin", "report", "photo", "map"],
+            "artifact_identifier_pattern": r"^[A-Z]+-\d{2,6}$",
         }
         policy.update(policy_overrides)
         return Challenge(
@@ -167,6 +173,27 @@ class Fix2ConstraintTests(unittest.TestCase):
         result = verifier.evaluate(challenge, candidate, allow_l3=False)
         self.assertEqual(result.verdict, Verdict.REJECT)
         self.assertIn("DIRECTIVE_CONTRACT_FAIL", result.signals["reason_codes"])
+
+    def test_interpretation_affinity_string_rejected_without_coercion(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(53), llm=None)
+        challenge = self._challenge(allow_fact_object_coercion=False)
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["interpretation_affinity"] = "narrative text"
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("FACT_SCHEMA_INVALID", result.signals["reason_codes"])
+
+    def test_interpretation_affinity_string_coerced_when_enabled(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(54), llm=None)
+        challenge = self._challenge(allow_fact_object_coercion=True)
+        fact_object = self._candidate().meta_m["fact_object"]
+        fact_object["interpretation_affinity"] = "narrative text"
+        candidate = self._candidate(fact_object=fact_object)
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.ACCEPT)
+        details = result.signals.get("reason_details", {})
+        self.assertIn("coercions", details)
 
     def test_step_one_does_not_require_refs(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(6), llm=None)

@@ -9,6 +9,7 @@ from .domain import Candidate, Challenge, VerificationLevel, VerificationResult,
 from .invariants import evaluate_invariants
 from .llm import LLMAdapter
 from .semantic import semantic_similarity
+from .fact_schema import validate_and_normalize_fact_object
 
 
 @dataclass(slots=True)
@@ -278,12 +279,21 @@ class NoveltyGateVerifier:
         } or set(self.allowed_fact_types)
         public_artifact_min_evidence = max(1, int(policy.get("public_artifact_min_evidence", 2)))
         directive_contracts = policy.get("directive_fact_type_contracts", {})
-        expected_fact_type = ""
+        expected_fact_type = str(policy.get("expected_fact_type", "")).strip()
         if isinstance(directive_contracts, dict):
-            expected_fact_type = str(directive_contracts.get(challenge.directive_type, "")).strip()
+            expected_fact_type = expected_fact_type or str(directive_contracts.get(challenge.directive_type, "")).strip()
 
-        fact_object = candidate.meta_m.get("fact_object", {})
-        fact_ok, fact_reason = self._fact_object_valid(fact_object) if isinstance(fact_object, dict) else (False, "fact_object missing")
+        raw_fact_object = candidate.meta_m.get("fact_object", {})
+        schema_result = validate_and_normalize_fact_object(
+            raw_fact_object,
+            policy,
+            expected_fact_type=expected_fact_type,
+            allow_coercion=bool(policy.get("allow_fact_object_coercion", False)),
+        )
+        fact_object = dict(schema_result.normalized)
+        if isinstance(candidate.meta_m, dict):
+            candidate.meta_m["fact_object"] = fact_object
+        fact_ok, fact_reason = self._fact_object_valid(fact_object) if not schema_result.errors else (False, "schema validation failed")
 
         canonical_fact = self._canonical_fact_text_from_object(fact_object if isinstance(fact_object, dict) else {})
         sim_fact = max((semantic_similarity(canonical_fact, prev, self.llm) for prev in recent_fact_texts), default=0.0)
@@ -366,6 +376,8 @@ class NoveltyGateVerifier:
 
         if not fact_ok:
             fail("FACT_SCHEMA_INVALID", f"invalid fact_object ({fact_reason})")
+        if schema_result.errors:
+            fail("FACT_SCHEMA_INVALID", "strict schema validation failed")
         if not fact_type:
             fail("TYPE_NOT_IN_ENUM", "fact_object.type is outside allowed enum")
         if expected_fact_type and fact_type and fact_type != expected_fact_type:
@@ -462,6 +474,8 @@ class NoveltyGateVerifier:
             "evidence_count": len(evidence_items),
             "artifact_identifier": artifact_identifier,
             "current_height": current_height,
+            "schema_errors": list(schema_result.errors),
+            "coercions": list(schema_result.coercions),
         }
         return VerificationResult(
             candidate_id=candidate.candidate_id,

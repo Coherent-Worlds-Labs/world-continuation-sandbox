@@ -21,6 +21,7 @@ from .taskgen import BranchSignals, TaskGenerator
 from .verifiers import default_verifiers
 from .world_config import DEFAULT_WORLD_CONFIG_PATH, load_world_config
 from .semantic import semantic_similarity
+from .fact_schema import validate_and_normalize_fact_object
 
 
 @dataclass(slots=True)
@@ -507,6 +508,12 @@ class SimulationEngine:
                 },
             )
         )
+        expected_fact_type = str(directive_fact_type_contracts.get(directive, "")).strip()
+        allow_fact_object_coercion = bool(self.progression.get("allow_fact_object_coercion", False))
+        coercion_default_affinity = dict(self.progression.get("coercion_default_affinity", {"I1": 0.34, "I2": 0.33, "I3": 0.33}))
+        interpretation_keys = list(self.progression.get("interpretation_keys", ["I1", "I2", "I3"]))
+        artifact_kind_enum = list(self.progression.get("artifact_kind_enum", ["registry_record", "evidence_card", "bulletin", "report", "photo", "map"]))
+        artifact_identifier_pattern = str(self.progression.get("artifact_identifier_pattern", r"^[A-Z]+-\d{2,6}$"))
         specificity_banned_terms = list(
             self.progression.get(
                 "specificity_banned_terms",
@@ -570,6 +577,12 @@ class SimulationEngine:
                 "specificity_banned_terms": specificity_banned_terms,
                 "public_artifact_min_evidence": public_artifact_min_evidence,
                 "directive_fact_type_contracts": directive_fact_type_contracts,
+                "expected_fact_type": expected_fact_type,
+                "allow_fact_object_coercion": allow_fact_object_coercion,
+                "coercion_default_affinity": coercion_default_affinity,
+                "interpretation_keys": interpretation_keys,
+                "artifact_kind_enum": artifact_kind_enum,
+                "artifact_identifier_pattern": artifact_identifier_pattern,
                 "novelty_phase_early_end": novelty_phase_early_end,
                 "novelty_phase_mid_end": novelty_phase_mid_end,
                 "sim_fact_max": sim_fact_max,
@@ -989,39 +1002,6 @@ class SimulationEngine:
             "interpretation_shift": round(float(interpretation_shift), 3),
         }
 
-    @staticmethod
-    def _normalize_fact_type(raw: Any) -> str:
-        text = str(raw or "").strip().lower()
-        mapping = {
-            "fact": "public_artifact",
-            "new_fact": "public_artifact",
-            "artifact": "public_artifact",
-            "publicartifact": "public_artifact",
-            "measurement": "measurement",
-            "institution action": "institutional_action",
-            "resource change": "resource_change",
-            "agent commitment": "agent_commitment",
-        }
-        return mapping.get(text, text.replace(" ", "_"))
-
-    @staticmethod
-    def _normalize_fact_id(raw: Any) -> str:
-        return str(raw or "").strip().upper()
-
-    def _normalized_fact_object(self, raw_obj: Any, allowed_types: set[str]) -> dict[str, Any]:
-        if not isinstance(raw_obj, dict):
-            return {}
-        normalized = dict(raw_obj)
-        normalized["id"] = self._normalize_fact_id(normalized.get("id", ""))
-        norm_type = self._normalize_fact_type(normalized.get("type", ""))
-        normalized["type"] = norm_type if norm_type in allowed_types else norm_type
-        refs = normalized.get("references", [])
-        if isinstance(refs, list):
-            normalized["references"] = [self._normalize_fact_id(x) for x in refs if self._normalize_fact_id(x)]
-        else:
-            normalized["references"] = []
-        return normalized
-
     def _candidate_screen(
         self,
         challenge: Challenge,
@@ -1031,16 +1011,20 @@ class SimulationEngine:
         recent_fact_texts: list[str],
     ) -> dict[str, Any]:
         policy = challenge.verifier_policy
-        allowed_types = {str(x).strip() for x in policy.get("fact_type_enum", []) if str(x).strip()}
-        if not allowed_types:
-            allowed_types = {"public_artifact", "witness", "measurement", "institutional_action", "resource_change", "agent_commitment"}
         contracts = policy.get("directive_fact_type_contracts", {})
-        expected_type = ""
-        if isinstance(contracts, dict):
+        expected_type = str(policy.get("expected_fact_type", "")).strip()
+        if not expected_type and isinstance(contracts, dict):
             expected_type = str(contracts.get(challenge.directive_type, "")).strip()
 
         raw_fact_object = candidate.meta_m.get("fact_object", {})
-        normalized_fact_object = self._normalized_fact_object(raw_fact_object, allowed_types)
+        allow_coercion = bool(policy.get("allow_fact_object_coercion", False))
+        schema_result = validate_and_normalize_fact_object(
+            raw_fact_object,
+            policy,
+            expected_fact_type=expected_type,
+            allow_coercion=allow_coercion,
+        )
+        normalized_fact_object = dict(schema_result.normalized)
         fact_type = str(normalized_fact_object.get("type", "")).strip()
         fact_id = str(normalized_fact_object.get("id", "")).strip()
         evidence = normalized_fact_object.get("evidence", [])
@@ -1050,18 +1034,10 @@ class SimulationEngine:
         refs_count = len(refs) if isinstance(refs, list) else 0
 
         reason_codes: list[str] = []
-        if not fact_id or not fact_type or fact_type not in allowed_types:
+        if schema_result.errors:
             reason_codes.append("FACT_SCHEMA_INVALID")
         if expected_type and fact_type and fact_type != expected_type:
             reason_codes.append("DIRECTIVE_CONTRACT_FAIL")
-        if not content or len(content.split()) < 4:
-            reason_codes.append("FACT_SCHEMA_INVALID")
-        if fact_type == "public_artifact":
-            kind = str(normalized_fact_object.get("artifact_kind", "")).strip()
-            locator = str(normalized_fact_object.get("artifact_locator", "")).strip()
-            identifier = str(normalized_fact_object.get("artifact_identifier", "")).strip()
-            if not kind or not locator or not identifier:
-                reason_codes.append("FACT_SCHEMA_INVALID")
 
         fact_text = self._fact_object_text(normalized_fact_object)
         max_fact_similarity = max((self._semantic_similarity(fact_text, prev) for prev in recent_fact_texts), default=0.0) if fact_text else 0.0
@@ -1084,6 +1060,8 @@ class SimulationEngine:
             "fact_similarity": round(max_fact_similarity, 3),
             "scene_similarity": round(max_scene_similarity, 3),
             "reason_codes": list(dict.fromkeys(reason_codes)),
+            "schema_errors": list(schema_result.errors),
+            "coercions": list(schema_result.coercions),
             "rank_score": round(rank_score, 3),
             "evidence_count": evidence_count,
             "references_count": refs_count,
@@ -1183,6 +1161,8 @@ class SimulationEngine:
                             "screen_expected_type": screen.get("expected_type", ""),
                             "screen_evidence_count": screen.get("evidence_count", 0),
                             "screen_references_count": screen.get("references_count", 0),
+                            "screen_schema_errors": list(screen.get("schema_errors", [])) if isinstance(screen.get("schema_errors", []), list) else [],
+                            "screen_coercions": list(screen.get("coercions", [])) if isinstance(screen.get("coercions", []), list) else [],
                         },
                     }
                 )

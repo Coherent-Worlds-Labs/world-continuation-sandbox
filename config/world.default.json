@@ -149,6 +149,22 @@
       "AgentCommitment": "agent_commitment",
       "ResourceConstraint": "resource_change"
     },
+    "allow_fact_object_coercion": true,
+    "coercion_default_affinity": {
+      "I1": 0.34,
+      "I2": 0.33,
+      "I3": 0.33
+    },
+    "interpretation_keys": ["I1", "I2", "I3"],
+    "artifact_kind_enum": [
+      "registry_record",
+      "evidence_card",
+      "bulletin",
+      "report",
+      "photo",
+      "map"
+    ],
+    "artifact_identifier_pattern": "^[A-Z]+-\\d{2,6}$",
     "escape_directive_types": [
       "IntroduceAmbiguousFact",
       "InstitutionalAction",

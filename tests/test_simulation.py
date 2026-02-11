@@ -174,6 +174,7 @@ class SimulationTests(unittest.TestCase):
         challenge = engine._build_challenge(1, branch, reject_streak=3)
         self.assertTrue(bool(challenge.verifier_policy.get("escape_mode")))
         self.assertIn(challenge.directive_type, {"IntroduceAmbiguousFact", "InstitutionalAction", "AgentCommitment", "ResourceConstraint"})
+        self.assertIn("expected_fact_type", challenge.verifier_policy)
 
     def test_scene_stagnation_forces_institutional_action(self) -> None:
         db = Path("data/test_world_scene_stagnation_directive.db")

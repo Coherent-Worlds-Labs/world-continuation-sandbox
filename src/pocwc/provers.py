@@ -7,6 +7,7 @@ from typing import Any
 
 from .domain import Candidate, Challenge
 from .llm import LLMAdapter
+from .fact_schema import validate_and_normalize_fact_object
 
 
 @dataclass(slots=True)
@@ -179,7 +180,30 @@ class Prover:
                     meta["llm_error"] = llm_error
         self._ensure_fact_object(bundle, max(strengths, key=strengths.get))
         if isinstance(bundle.get("fact_object"), dict):
+            expected_type = str(challenge.verifier_policy.get("expected_fact_type", "")).strip()
+            schema_result = validate_and_normalize_fact_object(
+                bundle["fact_object"],
+                challenge.verifier_policy,
+                expected_fact_type=expected_type,
+                allow_coercion=bool(challenge.verifier_policy.get("allow_fact_object_coercion", False)),
+            )
+            if schema_result.errors:
+                # Fall back to deterministic conversion from legacy fact to preserve protocol validity.
+                legacy = bundle.get("novel_facts", [])
+                if isinstance(legacy, list) and legacy and isinstance(legacy[0], dict):
+                    repaired = self._fact_object_from_legacy_fact(legacy[0], max(strengths, key=strengths.get))
+                    schema_result = validate_and_normalize_fact_object(
+                        repaired,
+                        challenge.verifier_policy,
+                        expected_fact_type=expected_type,
+                        allow_coercion=True,
+                    )
+            bundle["fact_object"] = schema_result.normalized if isinstance(schema_result.normalized, dict) else bundle["fact_object"]
             meta["fact_object"] = bundle["fact_object"]
+            if schema_result.coercions:
+                meta["fact_object_coercions"] = list(schema_result.coercions)
+            if schema_result.errors:
+                meta["fact_object_schema_errors"] = list(schema_result.errors)
 
         return Candidate(
             candidate_id=f"{challenge.challenge_id}-cand-{ordinal}",
