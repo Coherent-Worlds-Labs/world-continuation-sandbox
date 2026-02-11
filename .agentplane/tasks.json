@@ -1,6 +1,6 @@
 {
   "meta": {
-    "checksum": "e2297570ddc757133622b7d8c8faf90996cdb2114b1537281952303d43312216",
+    "checksum": "45e01330dbdb855b61c2b99722b85438b4d935a48d6b21f777f14e44fe73165e",
     "checksum_algo": "sha256",
     "managed_by": "agentplane",
     "schema_version": 1
@@ -4983,6 +4983,281 @@
         "note": "Verified: strict fact schema/type checks and fact id/type consistency validation are enforced with canonicalized ids and explicit reject codes. Tests passed.",
         "state": "ok",
         "updated_at": "2026-02-10T22:08:24.726Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Refactoring simulation flow to select one canonical candidate per step and verify only that candidate."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: one-candidate-per-step protocol is implemented; only selected candidate is verified and committed for each step."
+        }
+      ],
+      "commit": {
+        "hash": "b81ce4fd615610781b6d6a7a2a9ed07895dca298",
+        "message": "✅ 893HE0 backend: implement FIX7 single-candidate protocol and contracts"
+      },
+      "depends_on": [],
+      "description": "Select a single canonical candidate per step and run verifier cascade only for that candidate; remove cross-prover hard-fail coupling.",
+      "dirty": false,
+      "doc": "## Summary\n\nImplement one-candidate-per-step verification protocol in orchestrator.\n\n## Scope\n\nIn scope: orchestrator/aggregation flow and candidate selection diagnostics. Out of scope: UI redesign.\n\n## Plan\n\n1) Generate N candidates. 2) Prefilter candidates by local schema validity signals. 3) Select canonical candidate*. 4) Run verifier cascade only on candidate*. 5) Preserve traces for observability.\n\n## Risks\n\nRisk: changed acceptance rate. Mitigation: keep deterministic selection rules and preserve reason diagnostics.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:19:12.163Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: orchestrator now selects one canonical candidate per step and runs verifier cascade only for that candidate; cross-prover hard-fail coupling removed.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:12:39.571Z, excerpt_hash=sha256:47b32ded95fb17c3fa2c4c3c70fefae247b1bd6e45078ed3be9db88df3f5a766\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert flow refactor commit and restore previous loop behavior.\n\n## Context\n\nFIX7 identified rejection ambiguity caused by cross-prover hard-fail coupling.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q`n2) $env:PYTHONPATH=src; python scripts/run_simulation.py --steps 10 --db data/fix7_flow_smoke.db --seed 5\n\n## Notes\n\n### Decisions`n- Acceptance decision must reference one canonical candidate per step.",
+      "doc_updated_at": "2026-02-11T12:19:48.106Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:12:39.571Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Refactoring simulation flow to select one canonical candidate per step and verify only that candidate.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:19:12.163Z",
+          "author": "CODER",
+          "note": "Verified: orchestrator now selects one canonical candidate per step and runs verifier cascade only for that candidate; cross-prover hard-fail coupling removed.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:19:48.106Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: one-candidate-per-step protocol is implemented; only selected candidate is verified and committed for each step.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111211-893HE0",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX7 flow refactor plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:12:30.828Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX7 orchestration flow refactor.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Refactor orchestrator to one-candidate verification flow",
+      "verification": {
+        "note": "Verified: orchestrator now selects one canonical candidate per step and runs verifier cascade only for that candidate; cross-prover hard-fail coupling removed.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:19:12.163Z",
+        "updated_by": "CODER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "ORCHESTRATOR",
+          "body": "Start: Closing FIX7 tracking after dependent tasks are finished, verified, and committed."
+        }
+      ],
+      "commit": null,
+      "depends_on": [
+        "202602111211-893HE0",
+        "202602111211-YXY1FQ",
+        "202602111211-MFF9T4"
+      ],
+      "description": "Track FIX7: move to one-candidate-per-step verification, enforce directive contracts, strengthen public_artifact schema, and improve diagnostics/tests/docs.",
+      "dirty": false,
+      "doc": "## Summary\n\nTrack FIX7 protocol migration to selected-candidate verification and closure artifacts.\n\n## Scope\n\nIn scope: tracking and closure for tasks 893HE0, YXY1FQ, MFF9T4. Out of scope: unrelated feature work.\n\n## Plan\n\n1) Keep decomposition aligned with approved FIX7 scope. 2) Ensure implementation/test tasks are planned, approved, finished, and verified. 3) Close and export tracking artifacts.\n\n## Risks\n\nRisk: protocol flow changes may affect acceptance dynamics. Mitigation: require explicit regression and smoke verification before close.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:20:01.679Z — VERIFY — ok\n\nBy: ORCHESTRATOR\n\nNote: Tracking verified: tasks 893HE0, YXY1FQ, and MFF9T4 are DONE with verification and commit b81ce4f.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:11:59.436Z, excerpt_hash=sha256:0e580d8e991f14be1de384a8bb9aeb964a547aaa5fc79fc878bd19a78f9adfcc\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nReopen tracking if any dependent task fails verification.\n\n## Context\n\nRequested by user based on FIX7 analysis: avoid cross-prover structural coupling and enforce per-directive contracts.\n\n## Verify Steps\n\n1) agentplane task show 202602111211-893HE0 -> DONE/ok. 2) agentplane task show 202602111211-YXY1FQ -> DONE/ok. 3) agentplane task show 202602111211-MFF9T4 -> DONE/ok.\n\n## Notes\n\n### Decisions`n- Keep FIX7 split into flow refactor, contracts, and tests/docs for traceability.",
+      "doc_updated_at": "2026-02-11T12:20:01.836Z",
+      "doc_updated_by": "ORCHESTRATOR",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:20:01.679Z",
+          "author": "ORCHESTRATOR",
+          "note": "Tracking verified: tasks 893HE0, YXY1FQ, and MFF9T4 are DONE with verification and commit b81ce4f.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:20:01.836Z",
+          "author": "ORCHESTRATOR",
+          "from": "TODO",
+          "note": "Start: Closing FIX7 tracking after dependent tasks are finished, verified, and committed.",
+          "to": "DOING",
+          "type": "status"
+        }
+      ],
+      "id": "202602111211-M38JWH",
+      "id_source": "generated",
+      "owner": "ORCHESTRATOR",
+      "plan_approval": {
+        "note": "Approved FIX7 tracking plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:12:30.859Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "status": "DOING",
+      "tags": [
+        "code"
+      ],
+      "title": "PoCWC FIX7 single-candidate protocol tracking",
+      "verification": {
+        "note": "Tracking verified: tasks 893HE0, YXY1FQ, and MFF9T4 are DONE with verification and commit b81ce4f.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:20:01.679Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "TESTER",
+          "body": "Start: Finalizing FIX7 diagnostics/tests/docs updates and validating one-candidate protocol behavior in regression and smoke runs."
+        },
+        {
+          "author": "TESTER",
+          "body": "Verified: FIX7 regressions and docs were added; pytest and smoke validation succeeded with selected-candidate diagnostics."
+        }
+      ],
+      "commit": {
+        "hash": "b81ce4fd615610781b6d6a7a2a9ed07895dca298",
+        "message": "✅ 893HE0 backend: implement FIX7 single-candidate protocol and contracts"
+      },
+      "depends_on": [],
+      "description": "Expose selected-candidate diagnostics in CLI, add regression tests for FIX7 protocol behavior, and update README/ARCHITECTURE.",
+      "dirty": false,
+      "doc": "## Summary\n\nAdd FIX7 regression tests, CLI diagnostics, and docs updates.\n\n## Scope\n\nIn scope: tests, run_simulation diagnostics, README, ARCHITECTURE.\n\n## Plan\n\n1) Add regressions for one-candidate flow and no cross-prover structural false-fails. 2) Add directive contract/public artifact schema tests. 3) Update CLI output and docs.\n\n## Risks\n\nRisk: tests overfit implementation details. Mitigation: assert stable protocol outputs and reason codes only.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:19:12.416Z — VERIFY — ok\n\nBy: TESTER\n\nNote: Verified: added FIX7 regressions/docs and CLI diagnostics; pytest 30 passed and 10-step smoke run validated selected-candidate output.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:18:59.177Z, excerpt_hash=sha256:20286d93d5a1c2d5a1b0761796c257c0d0d4d2d62af83e43b9180fa88c289536\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert tests/docs commit if mismatch with approved behavior.\n\n## Context\n\nNeed auditable reasons and deterministic protocol behavior for rejected/accepted steps.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q\n\n## Notes\n\n### Decisions`n- FIX7 reason codes/details are protocol surface and documented.",
+      "doc_updated_at": "2026-02-11T12:19:48.038Z",
+      "doc_updated_by": "TESTER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:18:59.177Z",
+          "author": "TESTER",
+          "from": "TODO",
+          "note": "Start: Finalizing FIX7 diagnostics/tests/docs updates and validating one-candidate protocol behavior in regression and smoke runs.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:19:12.416Z",
+          "author": "TESTER",
+          "note": "Verified: added FIX7 regressions/docs and CLI diagnostics; pytest 30 passed and 10-step smoke run validated selected-candidate output.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:19:48.038Z",
+          "author": "TESTER",
+          "from": "DOING",
+          "note": "Verified: FIX7 regressions and docs were added; pytest and smoke validation succeeded with selected-candidate diagnostics.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111211-MFF9T4",
+      "id_source": "generated",
+      "owner": "TESTER",
+      "plan_approval": {
+        "note": "Approved FIX7 tests/docs plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:12:30.980Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Added FIX7 tests/docs and runtime diagnostics.",
+      "risk_level": "low",
+      "status": "DONE",
+      "tags": [
+        "code"
+      ],
+      "title": "Add FIX7 diagnostics, regression tests, and docs",
+      "verification": {
+        "note": "Verified: added FIX7 regressions/docs and CLI diagnostics; pytest 30 passed and 10-step smoke run validated selected-candidate output.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:19:12.416Z",
+        "updated_by": "TESTER"
+      },
+      "verify": []
+    },
+    {
+      "comments": [
+        {
+          "author": "CODER",
+          "body": "Start: Enforcing directive-type and public_artifact contracts with explicit FIX7 reason diagnostics."
+        },
+        {
+          "author": "CODER",
+          "body": "Verified: directive contracts and stronger public_artifact schema fields are enforced with explicit diagnostics."
+        }
+      ],
+      "commit": {
+        "hash": "b81ce4fd615610781b6d6a7a2a9ed07895dca298",
+        "message": "✅ 893HE0 backend: implement FIX7 single-candidate protocol and contracts"
+      },
+      "depends_on": [],
+      "description": "Add directive-type contract gates and strengthen public_artifact schema/specificity requirements with explicit reason codes.",
+      "dirty": false,
+      "doc": "## Summary\n\nEnforce directive-type contracts and stronger public_artifact schema.\n\n## Scope\n\nIn scope: verifiers/provers/config contract fields and reason codes. Out of scope: external API providers.\n\n## Plan\n\n1) Add directive->expected fact_type mapping policy. 2) Add hard directive contract gate. 3) Require artifact kind/locator/identifier for public_artifact and include identifier in specificity scoring. 4) Log pre/post-normalization fact object details.\n\n## Risks\n\nRisk: stricter contract may reject legacy outputs. Mitigation: canonical normalization plus explicit reason details.\n\n## Verification\n\n### Plan\n\n### Results\n\n<!-- BEGIN VERIFICATION RESULTS -->\n#### 2026-02-11T12:19:12.155Z — VERIFY — ok\n\nBy: CODER\n\nNote: Verified: directive-type contracts and strengthened public_artifact artifact fields are enforced with explicit reason codes/details.\n\nVerifyStepsRef: doc_version=2, doc_updated_at=2026-02-11T12:12:39.700Z, excerpt_hash=sha256:6733cbc924ddeb2edbafe91b11f1ea641be2af2fb9d528c459198eefe1db2762\n\n<!-- END VERIFICATION RESULTS -->\n\n## Rollback Plan\n\nRevert contract gate changes and restore previous schema policy.\n\n## Context\n\nFIX7 calls for type-oriented directives and stricter artifact validation.\n\n## Verify Steps\n\n1) $env:PYTHONPATH=src; python -m pytest tests -q`n2) $env:PYTHONPATH=src; python scripts/run_simulation.py --steps 10 --db data/fix7_contract_smoke.db --seed 9\n\n## Notes\n\n### Decisions`n- Directive contracts are protocol-level hard gates.",
+      "doc_updated_at": "2026-02-11T12:19:48.042Z",
+      "doc_updated_by": "CODER",
+      "doc_version": 2,
+      "events": [
+        {
+          "at": "2026-02-11T12:12:39.700Z",
+          "author": "CODER",
+          "from": "TODO",
+          "note": "Start: Enforcing directive-type and public_artifact contracts with explicit FIX7 reason diagnostics.",
+          "to": "DOING",
+          "type": "status"
+        },
+        {
+          "at": "2026-02-11T12:19:12.155Z",
+          "author": "CODER",
+          "note": "Verified: directive-type contracts and strengthened public_artifact artifact fields are enforced with explicit reason codes/details.",
+          "state": "ok",
+          "type": "verify"
+        },
+        {
+          "at": "2026-02-11T12:19:48.042Z",
+          "author": "CODER",
+          "from": "DOING",
+          "note": "Verified: directive contracts and stronger public_artifact schema fields are enforced with explicit diagnostics.",
+          "to": "DONE",
+          "type": "status"
+        }
+      ],
+      "id": "202602111211-YXY1FQ",
+      "id_source": "generated",
+      "owner": "CODER",
+      "plan_approval": {
+        "note": "Approved FIX7 contract plan.",
+        "state": "approved",
+        "updated_at": "2026-02-11T12:12:30.831Z",
+        "updated_by": "ORCHESTRATOR"
+      },
+      "priority": "high",
+      "result_summary": "Implemented FIX7 directive/artifact contract hardening.",
+      "risk_level": "med",
+      "status": "DONE",
+      "tags": [
+        "backend"
+      ],
+      "title": "Enforce FIX7 directive and artifact contracts",
+      "verification": {
+        "note": "Verified: directive-type contracts and strengthened public_artifact artifact fields are enforced with explicit reason codes/details.",
+        "state": "ok",
+        "updated_at": "2026-02-11T12:19:12.155Z",
         "updated_by": "CODER"
       },
       "verify": []
