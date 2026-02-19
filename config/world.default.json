@@ -61,10 +61,16 @@
   },
   "progression": {
     "fact_cadence_window": 3,
+    "require_new_fact_each_step": true,
     "max_new_facts_per_step": 1,
     "dependency_target_depth": 4,
     "required_reference_count": 2,
     "family_window": 6,
+    "diversity_window": 6,
+    "min_new_entities_per_window": 1,
+    "min_new_locations_per_window": 1,
+    "min_new_fact_types_per_window": 2,
+    "max_fact_type_share_per_window": 0.7,
     "required_families": [
       "introduce_fact",
       "institutional_action",

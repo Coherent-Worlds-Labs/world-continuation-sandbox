@@ -36,12 +36,15 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 def semantic_similarity(a: str, b: str, adapter: EmbeddingAdapter | None = None) -> float:
     if not a.strip() or not b.strip():
         return 0.0
+    lexical = lexical_jaccard(a, b)
     if adapter is not None:
         try:
             emb = adapter.embed_texts(texts=[a, b])
             if len(emb) == 2:
-                sim = cosine_similarity(emb[0], emb[1])
-                return max(0.0, min(1.0, (sim + 1.0) / 2.0))
+                emb_sim = cosine_similarity(emb[0], emb[1])
+                emb_norm = max(0.0, min(1.0, (emb_sim + 1.0) / 2.0))
+                # Keep lexical overlap in the loop to reduce embedding-only false positives.
+                return max(0.0, min(1.0, emb_norm * 0.75 + lexical * 0.25))
         except Exception:  # noqa: BLE001
             pass
-    return lexical_jaccard(a, b)
+    return lexical

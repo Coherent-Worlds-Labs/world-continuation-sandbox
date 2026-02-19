@@ -238,9 +238,10 @@ class NoveltyGateVerifier:
             {str(k): int(v) for k, v in fact_height_by_id_raw.items()} if isinstance(fact_height_by_id_raw, dict) else {}
         )
         recent_narratives = [str(x).strip() for x in policy.get("recent_narratives", []) if str(x).strip()]
-        active_anchor_ids = set(str(x).strip() for x in policy.get("active_anchor_ids", []) if str(x).strip())
+        active_anchor_ids = {self._canonical_fact_id(x) for x in policy.get("active_anchor_ids", []) if self._canonical_fact_id(x)}
 
         max_new_facts_per_step = max(1, int(policy.get("max_new_facts_per_step", 1)))
+        required_min_new_facts = max(0, int(policy.get("required_min_new_facts", 0)))
         dependency_target_depth = max(1, int(policy.get("dependency_target_depth", 4)))
         required_reference_count = max(1, int(policy.get("required_reference_count", 2)))
         enforce_dependency_accumulation = bool(policy.get("enforce_dependency_accumulation", True))
@@ -259,6 +260,29 @@ class NoveltyGateVerifier:
         scene_repeat_threshold = max(0.0, min(1.0, float(policy.get("scene_repeat_threshold", 0.97))))
         refs_target = max(1, int(policy.get("refs_target", 2)))
         mode = str(policy.get("mode", "diversify")).strip().lower()
+        diversity_window = max(1, int(policy.get("diversity_window", 6)))
+        required_diversity_dims = {
+            str(x).strip()
+            for x in policy.get("required_diversity_dims", [])
+            if str(x).strip()
+        }
+        recent_window_entities = {
+            str(x).strip().lower()
+            for x in policy.get("recent_window_entities", [])
+            if str(x).strip()
+        }
+        recent_window_locations = {
+            str(x).strip().lower()
+            for x in policy.get("recent_window_locations", [])
+            if str(x).strip()
+        }
+        recent_type_counts_raw = policy.get("recent_window_fact_type_counts", {})
+        recent_type_counts = (
+            {str(k).strip(): int(v) for k, v in recent_type_counts_raw.items() if str(k).strip()}
+            if isinstance(recent_type_counts_raw, dict)
+            else {}
+        )
+        max_fact_type_share_per_window = max(0.0, min(1.0, float(policy.get("max_fact_type_share_per_window", 1.0))))
         max_same_fact_type_diversify = max(1, int(policy.get("max_same_fact_type_diversify", 2)))
         early_phase_end = max(1, int(policy.get("novelty_phase_early_end", 5)))
         mid_phase_end = max(early_phase_end + 1, int(policy.get("novelty_phase_mid_end", 20)))
@@ -307,7 +331,7 @@ class NoveltyGateVerifier:
 
         references = []
         if isinstance(fact_object, dict) and isinstance(fact_object.get("references"), list):
-            references = [str(x).strip() for x in fact_object.get("references", []) if str(x).strip()]
+            references = [self._canonical_fact_id(x) for x in fact_object.get("references", []) if self._canonical_fact_id(x)]
         evidence = fact_object.get("evidence", []) if isinstance(fact_object, dict) else []
         if isinstance(evidence, list):
             evidence_items = [str(x).strip() for x in evidence if str(x).strip()]
@@ -315,6 +339,8 @@ class NoveltyGateVerifier:
             evidence_items = [str(evidence).strip()] if str(evidence).strip() else []
         fact_content = str((fact_object or {}).get("content", "")).strip() if isinstance(fact_object, dict) else ""
         artifact_identifier = str((fact_object or {}).get("artifact_identifier", "")).strip() if isinstance(fact_object, dict) else ""
+        candidate_entity = str((fact_object or {}).get("introduced_by", "")).strip().lower() if isinstance(fact_object, dict) else ""
+        candidate_location = str((fact_object or {}).get("artifact_locator", "")).strip().lower() if isinstance(fact_object, dict) else ""
         fact_specificity_score = self._fact_specificity_score(
             fact_content,
             evidence_items,
@@ -349,9 +375,15 @@ class NoveltyGateVerifier:
             novelty_score = 0.8 * novelty_structural + 0.2 * llm_novelty
 
         named_count = 1 if isinstance(fact_object, dict) and str(fact_object.get("id", "")).strip() else 0
-        unique_new = 1 if named_count and sim_fact < hard_fact_similarity_threshold else 0
+        duplicate_fact_id = 1 if fact_id and fact_id in active_anchor_ids else 0
+        unique_new = 1 if named_count and sim_fact < hard_fact_similarity_threshold and not duplicate_fact_id else 0
         commitment_count = 1 if fact_type == "agent_commitment" else 0
         tension_progress = float(candidate.meta_m.get("tension_progress", 0.5))
+        diversity_hits = {
+            "entity": 1 if candidate_entity and candidate_entity not in recent_window_entities else 0,
+            "location": 1 if candidate_location and candidate_location not in recent_window_locations else 0,
+            "fact_type": 1 if fact_type and fact_type not in recent_type_counts else 0,
+        }
 
         hard_fail = False
         reasons: list[str] = []
@@ -406,8 +438,29 @@ class NoveltyGateVerifier:
                     break
             if same_tail >= max_same_fact_type_diversify:
                 fail("TYPE_STREAK_EXCEEDED", "repeated fact type exceeds diversify streak limit")
+        if duplicate_fact_id:
+            fail("DUPLICATE_FACT_ID", "fact id already exists in active anchors")
         if unique_new > max_new_facts_per_step:
             fail("TOO_MANY_NEW_FACTS", "too many new facts for one step")
+        if unique_new < required_min_new_facts:
+            fail("NO_NEW_FACT", "candidate does not introduce required minimum of new facts")
+        if "entity" in required_diversity_dims and not diversity_hits["entity"]:
+            fail("DIVERSITY_QUOTA_FAIL", f"entity diversity quota unmet in last {diversity_window} facts")
+        if "location" in required_diversity_dims and not diversity_hits["location"]:
+            fail("DIVERSITY_QUOTA_FAIL", f"location diversity quota unmet in last {diversity_window} facts")
+        if "fact_type" in required_diversity_dims and not diversity_hits["fact_type"]:
+            fail("DIVERSITY_QUOTA_FAIL", f"fact_type diversity quota unmet in last {diversity_window} facts")
+        projected_total = max(1, sum(int(v) for v in recent_type_counts.values()) + (1 if fact_type else 0))
+        projected_type_count = int(recent_type_counts.get(fact_type, 0)) + (1 if fact_type else 0)
+        projected_share = float(projected_type_count) / float(projected_total)
+        history_count = sum(int(v) for v in recent_type_counts.values())
+        if (
+            fact_type
+            and history_count >= diversity_window
+            and projected_total > 0
+            and projected_share > max_fact_type_share_per_window
+        ):
+            fail("DIVERSITY_TYPE_SHARE_EXCEEDED", "fact type share exceeds policy limit for diversity window")
         novelty_threshold = max(self.min_novelty_score, novelty_min)
         novelty_gate = novelty_score >= novelty_threshold
         if not novelty_gate:
@@ -471,9 +524,16 @@ class NoveltyGateVerifier:
             "fact_type": fact_type,
             "expected_fact_type": expected_fact_type,
             "fact_id": fact_id,
+            "duplicate_fact_id": int(duplicate_fact_id),
+            "required_min_new_facts": int(required_min_new_facts),
             "evidence_count": len(evidence_items),
             "artifact_identifier": artifact_identifier,
             "current_height": current_height,
+            "required_diversity_dims": sorted(required_diversity_dims),
+            "diversity_hits": dict(diversity_hits),
+            "diversity_window": int(diversity_window),
+            "projected_fact_type_share": round(projected_share, 3),
+            "max_fact_type_share_per_window": round(max_fact_type_share_per_window, 3),
             "schema_errors": list(schema_result.errors),
             "coercions": list(schema_result.coercions),
         }
@@ -490,6 +550,7 @@ class NoveltyGateVerifier:
                 "novelty_score": round(novelty_score, 3),
                 "new_fact_count": float(int(unique_new)),
                 "named_fact_count": float(int(named_count)),
+                "required_min_new_facts": float(int(required_min_new_facts)),
                 "reference_count": float(int(refs_count)),
                 "refs_quality": round(float(refs_quality), 3),
                 "max_scene_similarity": round(max_scene_similarity, 3),
@@ -499,6 +560,10 @@ class NoveltyGateVerifier:
                 "novel_refs": round(novel_refs, 3),
                 "novelty_min_threshold": round(novelty_threshold, 3),
                 "fact_specificity_score": float(fact_specificity_score),
+                "diversity_entity_hit": float(diversity_hits["entity"]),
+                "diversity_location_hit": float(diversity_hits["location"]),
+                "diversity_fact_type_hit": float(diversity_hits["fact_type"]),
+                "projected_fact_type_share": round(projected_share, 3),
                 "novelty_gate": 1.0 if novelty_gate else 0.0,
                 "progress_gate": 1.0 if progress_gate else 0.0,
                 "schema_gate": schema_gate,

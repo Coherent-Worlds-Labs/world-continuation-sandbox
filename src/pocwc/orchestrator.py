@@ -378,6 +378,37 @@ class SimulationEngine:
         active_anchor_ids = self._active_anchor_ids(branch_id, limit=250)
         recent_directives = self._recent_branch_directives(branch_id, limit=12)
         required_families = self._required_families(recent_directives)
+        diversity_window = max(1, self._progression_int("diversity_window", 6))
+        min_new_entities_per_window = max(0, self._progression_int("min_new_entities_per_window", 1))
+        min_new_locations_per_window = max(0, self._progression_int("min_new_locations_per_window", 1))
+        min_new_fact_types_per_window = max(0, self._progression_int("min_new_fact_types_per_window", 2))
+        max_fact_type_share_per_window = min(1.0, max(0.0, self._progression_float("max_fact_type_share_per_window", 1.0)))
+        window_facts = recent_facts[:diversity_window]
+        window_entities = {
+            str(f.get("subject", "")).strip().lower()
+            for f in window_facts
+            if str(f.get("subject", "")).strip()
+        }
+        window_locations = {
+            str(f.get("location_hint", "")).strip().lower()
+            for f in window_facts
+            if str(f.get("location_hint", "")).strip()
+        }
+        window_fact_types: list[str] = [
+            str(f.get("anchor_type", "")).strip()
+            for f in window_facts
+            if str(f.get("anchor_type", "")).strip()
+        ]
+        window_fact_type_counts: dict[str, int] = {}
+        for item in window_fact_types:
+            window_fact_type_counts[item] = window_fact_type_counts.get(item, 0) + 1
+        required_diversity_dims: list[str] = []
+        if len(window_entities) < min_new_entities_per_window:
+            required_diversity_dims.append("entity")
+        if len(window_locations) < min_new_locations_per_window:
+            required_diversity_dims.append("location")
+        if len(set(window_fact_types)) < min_new_fact_types_per_window:
+            required_diversity_dims.append("fact_type")
         signals = self._branch_signals(branch)
         directive = self.taskgen.pick_directive(
             signals,
@@ -450,7 +481,8 @@ class SimulationEngine:
                 "and provide at least one explicit reference to a prior fact id when available."
             )
         cadence_window = max(1, self._progression_int("fact_cadence_window", 3))
-        required_min_new_facts = 1 if self.steps_since_new_fact >= cadence_window - 1 else 0
+        require_new_fact_each_step = bool(self.progression.get("require_new_fact_each_step", True))
+        required_min_new_facts = 1 if require_new_fact_each_step else (1 if self.steps_since_new_fact >= cadence_window - 1 else 0)
         dependency_target_depth = max(1, self._progression_int("dependency_target_depth", 4))
         required_reference_count = max(1, self._progression_int("required_reference_count", 2))
         max_new_facts_per_step = max(1, self._progression_int("max_new_facts_per_step", 1))
@@ -548,6 +580,12 @@ class SimulationEngine:
                 "last_fact_ids": active_anchor_ids[-12:],
                 "recent_directives": recent_directives,
                 "required_families": required_families,
+                "diversity_window": diversity_window,
+                "required_diversity_dims": required_diversity_dims,
+                "recent_window_entities": sorted(window_entities),
+                "recent_window_locations": sorted(window_locations),
+                "recent_window_fact_type_counts": window_fact_type_counts,
+                "max_fact_type_share_per_window": max_fact_type_share_per_window,
                 "required_min_new_facts": required_min_new_facts,
                 "max_new_facts_per_step": max_new_facts_per_step,
                 "dependency_target_depth": dependency_target_depth,
@@ -761,19 +799,6 @@ class SimulationEngine:
             if str(row.get("fact_id", "")).strip()
         }
 
-        def ensure_unique_fact_id(raw_id: str, index: int) -> str:
-            base = raw_id.strip() or f"{state_id}-fact-{index + 1}"
-            if base not in existing_ids:
-                existing_ids.add(base)
-                return base
-            candidate = f"{base}::{state_id}"
-            suffix = 1
-            while candidate in existing_ids:
-                suffix += 1
-                candidate = f"{base}::{state_id}::{suffix}"
-            existing_ids.add(candidate)
-            return candidate
-
         canonical_facts: list[dict[str, Any]] = []
         if isinstance(fact_object, dict) and str(fact_object.get("id", "")).strip():
             evidence_raw = fact_object.get("evidence", "")
@@ -804,7 +829,7 @@ class SimulationEngine:
         seen_ids: set[str] = set()
         for item in canonical_facts:
             fid = str(item.get("fact_id", "")).strip()
-            if not fid or fid in seen_ids:
+            if not fid or fid in seen_ids or fid in existing_ids:
                 continue
             seen_ids.add(fid)
             deduped.append(item)
@@ -814,7 +839,10 @@ class SimulationEngine:
         for index, item in enumerate(canonical_facts):
             if not isinstance(item, dict):
                 continue
-            unique_fact_id = ensure_unique_fact_id(str(item.get("fact_id", "")), index)
+            fact_id = str(item.get("fact_id", "")).strip() or f"{state_id}-fact-{index + 1}"
+            if fact_id in existing_ids:
+                continue
+            existing_ids.add(fact_id)
             fact_text = self._fact_text(item)
             if not fact_text:
                 continue
@@ -825,7 +853,7 @@ class SimulationEngine:
                 {
                     "branch_id": branch_id,
                     "state_id": state_id,
-                    "fact_id": unique_fact_id,
+                    "fact_id": fact_id,
                     "anchor_type": str(item.get("anchor_type", "public_artifact")),
                     "subject": str(item.get("subject", "")),
                     "predicate": str(item.get("predicate", "")),
@@ -1032,12 +1060,55 @@ class SimulationEngine:
         content = str(normalized_fact_object.get("content", "")).strip()
         refs = normalized_fact_object.get("references", [])
         refs_count = len(refs) if isinstance(refs, list) else 0
+        candidate_entity = str(normalized_fact_object.get("introduced_by", "")).strip().lower()
+        candidate_location = str(normalized_fact_object.get("artifact_locator", "")).strip().lower()
 
         reason_codes: list[str] = []
         if schema_result.errors:
             reason_codes.append("FACT_SCHEMA_INVALID")
         if expected_type and fact_type and fact_type != expected_type:
             reason_codes.append("DIRECTIVE_CONTRACT_FAIL")
+
+        required_diversity_dims = {
+            str(x).strip()
+            for x in policy.get("required_diversity_dims", [])
+            if str(x).strip()
+        }
+        recent_entities = {
+            str(x).strip().lower()
+            for x in policy.get("recent_window_entities", [])
+            if str(x).strip()
+        }
+        recent_locations = {
+            str(x).strip().lower()
+            for x in policy.get("recent_window_locations", [])
+            if str(x).strip()
+        }
+        recent_type_counts_raw = policy.get("recent_window_fact_type_counts", {})
+        recent_type_counts = (
+            {str(k).strip(): int(v) for k, v in recent_type_counts_raw.items() if str(k).strip()}
+            if isinstance(recent_type_counts_raw, dict)
+            else {}
+        )
+        diversity_window = max(1, int(policy.get("diversity_window", 6)))
+        max_fact_type_share = max(0.0, min(1.0, float(policy.get("max_fact_type_share_per_window", 1.0))))
+        projected_total = max(1, sum(int(v) for v in recent_type_counts.values()) + (1 if fact_type else 0))
+        projected_type_count = int(recent_type_counts.get(fact_type, 0)) + (1 if fact_type else 0)
+        projected_type_share = float(projected_type_count) / float(projected_total)
+        diversity_hits = {
+            "entity": 1 if candidate_entity and candidate_entity not in recent_entities else 0,
+            "location": 1 if candidate_location and candidate_location not in recent_locations else 0,
+            "fact_type": 1 if fact_type and fact_type not in recent_type_counts else 0,
+        }
+        diversity_bonus = 0.0
+        for dim in required_diversity_dims:
+            if diversity_hits.get(dim, 0) > 0:
+                diversity_bonus += 14.0
+            else:
+                diversity_bonus -= 6.0
+        history_count = sum(int(v) for v in recent_type_counts.values())
+        if fact_type and history_count >= diversity_window and projected_type_share > max_fact_type_share:
+            diversity_bonus -= 16.0
 
         fact_text = self._fact_object_text(normalized_fact_object)
         max_fact_similarity = max((self._semantic_similarity(fact_text, prev) for prev in recent_fact_texts), default=0.0) if fact_text else 0.0
@@ -1050,6 +1121,7 @@ class SimulationEngine:
             (1000.0 if not reason_codes else 0.0)
             + novelty_score * 100.0
             + float(evidence_count * 2 + refs_count)
+            + diversity_bonus
         )
         return {
             "raw_fact_object": raw_fact_object if isinstance(raw_fact_object, dict) else {},
@@ -1062,6 +1134,10 @@ class SimulationEngine:
             "reason_codes": list(dict.fromkeys(reason_codes)),
             "schema_errors": list(schema_result.errors),
             "coercions": list(schema_result.coercions),
+            "diversity_hits": diversity_hits,
+            "diversity_bonus": round(diversity_bonus, 3),
+            "projected_fact_type_share": round(projected_type_share, 3),
+            "max_fact_type_share_per_window": round(max_fact_type_share, 3),
             "rank_score": round(rank_score, 3),
             "evidence_count": evidence_count,
             "references_count": refs_count,
@@ -1127,6 +1203,8 @@ class SimulationEngine:
                         "candidate_id": candidate.candidate_id,
                         "selected": False,
                         "screen_rank": screen.get("rank_score", 0.0),
+                        "screen_diversity_bonus": screen.get("diversity_bonus", 0.0),
+                        "screen_diversity_hits": screen.get("diversity_hits", {}),
                         "screen_reason_codes": screen.get("reason_codes", []),
                         "raw_fact_object": screen.get("raw_fact_object", {}),
                         "normalized_fact_object": screen.get("normalized_fact_object", {}),
@@ -1163,6 +1241,8 @@ class SimulationEngine:
                             "screen_references_count": screen.get("references_count", 0),
                             "screen_schema_errors": list(screen.get("schema_errors", [])) if isinstance(screen.get("schema_errors", []), list) else [],
                             "screen_coercions": list(screen.get("coercions", [])) if isinstance(screen.get("coercions", []), list) else [],
+                            "screen_projected_fact_type_share": screen.get("projected_fact_type_share", 0.0),
+                            "screen_max_fact_type_share_per_window": screen.get("max_fact_type_share_per_window", 1.0),
                         },
                     }
                 )
