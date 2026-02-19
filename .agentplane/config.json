@@ -2,16 +2,43 @@
   "schema_version": 1,
   "workflow_mode": "direct",
   "status_commit_policy": "warn",
-  "finish_auto_status_commit": true,
+  "commit_automation": "finish_only",
+  "finish_auto_status_commit": false,
   "agents": {
     "approvals": {
       "require_plan": true,
       "require_network": true,
-      "require_verify": true
+      "require_verify": true,
+      "require_force": false
     }
   },
   "recipes": {
     "storage_default": "link"
+  },
+  "execution": {
+    "profile": "balanced",
+    "reasoning_effort": "medium",
+    "tool_budget": {
+      "discovery": 6,
+      "implementation": 10,
+      "verification": 6
+    },
+    "stop_conditions": [
+      "Missing required input blocks correctness.",
+      "Requested action expands scope or risk beyond approved plan.",
+      "Verification fails and remediation changes scope."
+    ],
+    "handoff_conditions": [
+      "Role boundary reached (for example CODER -> TESTER/REVIEWER).",
+      "Task depends_on prerequisites are incomplete.",
+      "Specialized agent is required."
+    ],
+    "unsafe_actions_requiring_explicit_user_ok": [
+      "Destructive git history operations.",
+      "Outside-repo read/write.",
+      "Credential, keychain, or SSH material changes.",
+      "Network actions when approvals are disabled."
+    ]
   },
   "paths": {
     "agents_dir": ".agentplane/agents",
@@ -34,9 +61,33 @@
         "backend",
         "frontend"
       ],
+      "require_steps_for_primary": [
+        "code",
+        "data",
+        "ops"
+      ],
+      "require_verification_for_primary": [
+        "code",
+        "data",
+        "ops"
+      ],
       "spike_tag": "spike",
       "enforce_on_plan_approve": true,
       "enforce_on_start_when_no_plan": true
+    },
+    "tags": {
+      "primary_allowlist": [
+        "code",
+        "data",
+        "research",
+        "docs",
+        "ops",
+        "product",
+        "meta"
+      ],
+      "strict_primary": false,
+      "fallback_primary": "meta",
+      "lock_primary_on_update": true
     },
     "doc": {
       "sections": [
