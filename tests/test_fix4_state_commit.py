@@ -46,7 +46,7 @@ class Fix4StateCommitTests(unittest.TestCase):
         self.assertEqual(summary["accepted_candidates"], 0)
         self.assertEqual(summary["rejected_candidates"], 1)
 
-    def test_duplicate_fact_id_is_uniquified_on_commit(self) -> None:
+    def test_duplicate_fact_id_is_not_rewritten_on_commit(self) -> None:
         db = Path("data/test_world_fix4_fact_ids.db")
         if db.exists():
             db.unlink()
@@ -85,8 +85,8 @@ class Fix4StateCommitTests(unittest.TestCase):
         active = engine.store.list_active_facts("branch-main", limit=20)
         ids = [str(row.get("fact_id", "")) for row in active]
 
-        self.assertEqual(len(ids), 2)
-        self.assertEqual(len(set(ids)), 2)
+        self.assertEqual(len(ids), 1)
+        self.assertEqual(ids[0], "F_REPEAT")
 
 
 if __name__ == "__main__":

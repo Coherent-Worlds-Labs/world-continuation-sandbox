@@ -76,6 +76,8 @@ class SimulationTests(unittest.TestCase):
             self.assertEqual(selected_count, 1)
             for trace in traces:
                 self.assertIn("selected", trace)
+                self.assertIn("screen_diversity_bonus", trace)
+                self.assertIn("screen_diversity_hits", trace)
                 self.assertIn("raw_fact_object", trace)
                 self.assertIn("normalized_fact_object", trace)
                 self.assertIn("screen_reason_codes", trace)
@@ -93,6 +95,22 @@ class SimulationTests(unittest.TestCase):
                 self.assertIn("reason_codes", trace)
                 self.assertIn("reason_details", trace)
                 self.assertEqual(int(trace["new_fact_count"]), float(trace["new_fact_count"]))
+
+    def test_build_challenge_contains_diversity_policy(self) -> None:
+        db = Path("data/test_world_diversity_policy.db")
+        if db.exists():
+            db.unlink()
+        engine = SimulationEngine(SimulationConfig(db_path=db, steps=1, seed=19))
+        engine._seed_genesis()
+        branch = engine.store.get_branch("branch-main")
+        self.assertIsNotNone(branch)
+        challenge = engine._build_challenge(1, branch, reject_streak=0)
+        policy = challenge.verifier_policy
+        self.assertIn("required_diversity_dims", policy)
+        self.assertIn("recent_window_entities", policy)
+        self.assertIn("recent_window_locations", policy)
+        self.assertIn("recent_window_fact_type_counts", policy)
+        self.assertIn("max_fact_type_share_per_window", policy)
 
     def test_directive_repetition_is_bounded(self) -> None:
         db = Path("data/test_world_directive_repetition.db")

@@ -123,6 +123,40 @@ class Fix2ConstraintTests(unittest.TestCase):
         self.assertEqual(result.verdict, Verdict.REJECT)
         self.assertIn("PROGRESS_GATE_FAIL", result.signals["reason_codes"])
 
+    def test_no_new_fact_requirement_is_hard_gate(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(21), llm=None)
+        challenge = self._challenge(
+            required_min_new_facts=1,
+            recent_fact_texts=[
+                "public_artifact: City clerk publishes a timestamped registry copy in the public ledger. | report from public ledger ; witness transcript in archive registry"
+            ],
+        )
+        candidate = self._candidate()
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("NO_NEW_FACT", result.signals["reason_codes"])
+
+    def test_duplicate_fact_id_is_rejected(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(22), llm=None)
+        challenge = self._challenge(active_anchor_ids=["F_NEW_1", "F_PREV_1"])
+        candidate = self._candidate()
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("DUPLICATE_FACT_ID", result.signals["reason_codes"])
+
+    def test_diversity_quota_fail_for_fact_type_share(self):
+        verifier = NoveltyGateVerifier("verifier-novelty", random.Random(23), llm=None)
+        challenge = self._challenge(
+            required_diversity_dims=["fact_type"],
+            recent_window_fact_type_counts={"public_artifact": 4},
+            diversity_window=3,
+            max_fact_type_share_per_window=0.70,
+        )
+        candidate = self._candidate()
+        result = verifier.evaluate(challenge, candidate, allow_l3=False)
+        self.assertEqual(result.verdict, Verdict.REJECT)
+        self.assertIn("DIVERSITY_QUOTA_FAIL", result.signals["reason_codes"])
+
     def test_equivalent_fact_is_rejected(self):
         verifier = NoveltyGateVerifier("verifier-novelty", random.Random(3), llm=None)
         challenge = self._challenge(
